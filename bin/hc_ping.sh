@@ -76,8 +76,7 @@ while [ $# -gt 0 ]; do
     case $1 in
         start | success | failure | exco )
             hc_cmd=$1
-            [[ $1 == exco ]] && { ec_val=$2; shift; }
-            ;;
+            [[ $1 == exco ]] && { ec_val=$2; shift; } ;;
         -m )
             ping_msg=$2
             shift ;;
