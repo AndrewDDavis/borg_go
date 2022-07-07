@@ -7,6 +7,8 @@
 # On macOS, need to install BorgBackup through the tap method with homebrew
 # to allow fuse mounting to work.
 
+[[ $(id -u) -eq 0 ]] || { echo "root or sudo required for $0."; exit 2; }
+
 # Can unmount volume if run with -u
 if [[ $# -eq 1 ]] && [[ $1 == '-u' ]]; then
     action=unmount
@@ -20,10 +22,10 @@ hostnm="$(hostname -s)"
 
 if [[ $action == unmount ]]; then
     umount -v "$mntpnt"
-fi
 
-# Ensure backup location is mounted
-if  [[ ! -e ${mntpnt}/README ]]; then
+elif [[ ! -e ${mntpnt}/README ]]; then
+    # Ensure backup location is mounted
+
     # '-o reconnect' should solve the error "mount point ... is itself on a FUSE volume",
     #   caused by disconnect of underlying SSH
     # if not, umount should work
@@ -42,6 +44,7 @@ if  [[ ! -e ${mntpnt}/README ]]; then
     fi
 
     # mount ssh volume from hippocampus
+    echo "borg_mount-check: sshfs may ask for remote password..."
     sshfs -o reconnect,allow_other,default_permissions,Ciphers=aes128-ctr \
           root@hc:/shares/addavis/Backup/"$repodir" \
           "$mntpnt"

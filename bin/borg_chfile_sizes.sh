@@ -38,6 +38,7 @@ fi
 
 borg_logfile=borg_log.txt
 chf_fn=borg_chfiles.txt
+errf_fn=borg_errfiles.txt
 fs_fn=borg_chfile_sizes.txt
 
 cd "$BORG_CONFIG_DIR" \
@@ -46,27 +47,33 @@ cd "$BORG_CONFIG_DIR" \
 [[ -r $borg_logfile ]] \
     || { print_msg ERROR "could not read logfile: '$borg_logfile'"; exit 2; }
 
-# parse log file to extract only file paths
-sed -En 's/^.*INFO [AMCE-] (.*)/\1/ p' $borg_logfile >"${chf_fn}.new"
+# check for any error files
+sed -En 's/^.*INFO E (.*)/\1/ p' $borg_logfile >"${errf_fn}.new"
+n_files=$(grep -c '^' "${errf_fn}.new")
+if (( $n_files == 0 )); then
+    # no errors, as expected
+    /bin/rm "${errf_fn}.new"
+else
+    /bin/mv "${errf_fn}.new" "$errf_fn"
+    print_msg WARNING "Error files found, see $errf_fn:"
+    head "$errf_fn"
+fi
 
-# need to parse wc output with sed because BSD and Gnu give different output
-# - could also have just piped to xargs I think
-n_files=$(wc -l "${chf_fn}.new" | sed -En 's/^[ \t]*([0-9]+) .*/\1/ p')
+# parse log file to extract only file paths of changed files
+sed -En 's/^.*INFO [AMC] (.*)/\1/ p' $borg_logfile >"${chf_fn}.new"
 
+n_files=$(grep -c '^' "${chf_fn}.new")
 if [[ $n_files =~ [^0-9] ]]; then
-
     print_msg ERROR "expected non-negative integer for n_files: $n_files"
     exit 2
 
 elif [[ $n_files -eq 0 ]]; then
-
     print_msg WARNING "no filenames found in log"
     /bin/rm "${chf_fn}.new"
     exit 0
 
 else
-
-    /bin/mv "${chf_fn}.new" "${chf_fn}"
+    /bin/mv "${chf_fn}.new" "$chf_fn"
 fi
 
 # find file sizes for changed files
@@ -79,7 +86,7 @@ fi
 
 printf '%s\0' $(< "$chf_fn") | xargs -0 du -hs -- 2>/dev/null >"${fs_fn}.new"
 
-n_sizes=$(wc -l "${fs_fn}.new" | sed -En 's/^[ \t]*([0-9]+) .*/\1/ p')
+n_sizes=$(grep -c '^' "${fs_fn}.new")
 
 # ensure du output was as expected
 if [[ $n_sizes =~ [^0-9] ]]; then
