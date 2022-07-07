@@ -108,10 +108,12 @@ else
 fi
 
 
-# PATH: If user can't or doesn't want to use SETENV or override secure_path in sudoers,
-# PATH may have been reset, and the supporting scripts of the borg_go_script package
-# won't be found. However, these should be in the same directory, so this allows borg_go
-# to be run as `sudo -EH $(which borg_go)` under those circumstances.
+# PATH may have been reset, and the supporting scripts of the borg_go package won't be
+# found. This may happen if running as straight root, rather than sudo (e.g. from
+# launchd or cron), or if user can't or doesn't want to use SETENV or override
+# secure_path in sudoers. However, the scripts should be in the same directory as this
+# one, so the following should allow borg_go to be run as `sudo -EH $(which borg_go)`
+# under those circumstances, or as root with the relevant environment variables set.
 script_dn=$(dirname -- "$0")
 export PATH=$script_dn:$PATH
 
@@ -131,7 +133,7 @@ export PATH=$script_dn:$PATH
 
 
 # Environment variables
-# - set in user ~/.bashrc: BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
+# - set in user ~/.bashrc or launchd plist: BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
 # - unset, when running unencrypted locally or over a LAN: BORG_PASSPHRASE
 # - cache and security should go in root's home if running as `sudo -EH`. This is to
 #   prevent permissions problems when later running e.g. `borg info` as regular user
@@ -335,7 +337,7 @@ done
 # unmount
 [[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] && borg_mount-check -u
 
-# chown log files
+# chown log files, if running under sudo
 # - should only be necessary for newly created files, but shouldn't hurt
 luser=$(logname)  # login name of user running sudo
 luser_group=$(id -gn "$luser")
@@ -346,3 +348,5 @@ if [[ $luser != $(id -un 0) ]]; then
         [[ -e $fn ]] && chown "$luser:$luser_group" $fn
     done
 fi
+
+print_msg "borg_go Done."
