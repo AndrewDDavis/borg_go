@@ -135,11 +135,11 @@ function send_ping {
     [[ -n ${1:-} ]] && full_url+="/$1"
 
     # check for `borg create/prune --stats` output if requested
-    if [[ ${stats:-} == cstats && -r "${BORG_CONFIG_DIR}/borg_stats_create.txt" ]]; then
-        local stats_fn="${BORG_CONFIG_DIR}/borg_stats_create.txt"
+    if [[ ${stats:-} == cstats && -r "${BORG_CONFIG_DIR}/borg_log_create-stats.txt" ]]; then
+        local stats_fn="${BORG_CONFIG_DIR}/borg_log_create-stats.txt"
 
-    elif [[ ${stats:-} == pstats && -r "${BORG_CONFIG_DIR}/borg_stats_prune.txt" ]]; then
-        local stats_fn="${BORG_CONFIG_DIR}/borg_stats_prune.txt"
+    elif [[ ${stats:-} == pstats && -r "${BORG_CONFIG_DIR}/borg_log_prune-stats.txt" ]]; then
+        local stats_fn="${BORG_CONFIG_DIR}/borg_log_prune-stats.txt"
     fi
 
     # curl command

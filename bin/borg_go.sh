@@ -32,11 +32,13 @@ EOF
 }
 
 # Robust options
-set -o nounset    # fail on unset variables
-set -o errexit    # fail on non-zero return values
-set -o errtrace   # make shell functions, subshells, etc obey ERR trap
-set -o pipefail   # fail if any piped command fails
-shopt -s extglob  # allow extended pattern matching
+set -o nounset     # fail on unset variables
+set -o errexit     # fail on non-zero return values
+set -o errtrace    # make shell functions, subshells, etc obey ERR trap
+set -o pipefail    # fail if any piped command fails
+shopt -s extglob   # allow extended pattern matching
+shopt -s nullglob  # non-matching glob patterns return null string
+
 
 # print_msg function
 # - prints log-style messages
@@ -108,17 +110,25 @@ else
 fi
 
 
+# Environment variables
+# - set in user ~/.bashrc or launchd plist: BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
+# - unset, when running unencrypted locally or over a LAN: BORG_PASSPHRASE
+# - cache and security should go in root's home if running as `sudo -EH`. This is to
+#   prevent permissions problems when later running e.g. `borg info` as regular user
+export BORG_CACHE_DIR=$HOME/.cache/borg
+export BORG_SECURITY_DIR=$HOME/.config/borg/security
+
 # PATH may have been reset, and the supporting scripts of the borg_go package won't be
-# found. This may happen if running as straight root, rather than sudo (e.g. from
-# launchd or cron), or if user can't or doesn't want to use SETENV or override
-# secure_path in sudoers. However, the scripts should be in the same directory as this
-# one, so the following should allow borg_go to be run as `sudo -EH $(which borg_go)`
-# under those circumstances, or as root with the relevant environment variables set.
+# found. This may happen if running e.g. from launchd or cron as straight root, rather
+# than sudo, or if user can't or doesn't want to use SETENV or override secure_path in
+# sudoers. However, the scripts should be in the same directory as this one, so the
+# following should allow borg_go to be run as `sudo -EH $(which borg_go)` under those
+# circumstances, or as root with the relevant environment variables set.
 script_dn=$(dirname -- "$0")
-export PATH=$script_dn:$PATH
+[[ $PATH == *"$script_dn"* ]] || export PATH=$script_dn:$PATH
 
 
-# Other required scripts, should be linked in e.g. ~/.local/bin
+# Other required scripts should be linked in e.g. ~/.local/bin
 [[ -n $(command -v borg_chfile_sizes) ]] \
     || raise 2 "borg_chfile_sizes not found"
 
@@ -132,19 +142,13 @@ export PATH=$script_dn:$PATH
     && { [[ -n $(command -v borg_mount-check) ]] || raise 2 "borg_mount-check not found"; }
 
 
-# Environment variables
-# - set in user ~/.bashrc or launchd plist: BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
-# - unset, when running unencrypted locally or over a LAN: BORG_PASSPHRASE
-# - cache and security should go in root's home if running as `sudo -EH`. This is to
-#   prevent permissions problems when later running e.g. `borg info` as regular user
-export BORG_CACHE_DIR=$HOME/.cache/borg
-export BORG_SECURITY_DIR=$HOME/.config/borg/security
-
 # Umask -- no write for group, no perms for other
 umask 027
 
 # Wipe out the log, then borg_logging.conf should append for this session
+# - try to preserve ownership and file mode
 log_fn=$BORG_CONFIG_DIR/borg_log.txt
+/bin/cp -pf "$log_fn" "${log_fn}.1" && gzip -f "${log_fn}.1"
 printf '' > "$log_fn"
 
 
@@ -213,7 +217,7 @@ function run_create {
         borg_chfile_sizes
 
         # set aside stats block from log to prevent overwriting
-        bc_stats_fn="$BORG_CONFIG_DIR/borg_stats_create.txt"
+        bc_stats_fn="$BORG_CONFIG_DIR/borg_log_create-stats.txt"
         grep -B 6 -A 10 'INFO Duration' "$log_fn" > "${bc_stats_fn}.new"
 
         if [[ $(grep -c '^' "${bc_stats_fn}.new") -eq 17 ]]; then
@@ -262,21 +266,43 @@ function run_prune {
 
     print_msg "Starting prune ..."
 
-    # from borgmatic:
-    # borg prune --keep-hourly 24 --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --keep-yearly 3 \
-    #            --prefix '{hostname}-' --debug --show-rc hud@nemo:/mnt/backup/borgbackup_squamish_macos_repo
+    # TODO: add test/dry-run option to run `prune -v --list --dry-run ...`
+    #       deal with missing stats block for dry-run as in create
 
     # borg command
     # - The '{hostname}-' prefix limits prune's operation to this machine's archives
+    # - N.B. the keep rules don't operate exactly as you may expect, because they don't
+    # count intervals in which there are no backups. E.g., if you only did 7 backups in
+    # the last year, and they were all on different days, then --keep-daily 7 would keep
+    # all those backups for the last year, not just the ones in the past week. Or, e.g.
+    # if you only backup daily, and use --keep-hourly 24, the last 24 days of backups
+    # will be kept. The keep-within rules are more like this, but not exactly...
+    # - From the docs:
+    #     + The --keep-within option takes an argument of the form “<int><char>”, where
+    #       char is “H”, “d”, “w”, “m”, “y”. For example, --keep-within 2d means to keep
+    #       all archives that were created within the past 48 hours.
+    #     + The archives kept with this option do not count towards the totals specified
+    #       by any other options.
+    #     + E.g., --keep-daily 7 means to keep the latest backup on each day, up to 7
+    #       most recent days with backups (days without backups do not count).
+    # - If any rule is not fully satisfied, the earliest backup is retained.
+    # - Weeks go from Monday to Sunday, so weekly backups may keep e.g. a Tuesday and a
+    #   Sunday archive if that's all it has to choose from.
+    # - See the docs for examples, but the finer details probably don't matter to us:
+    # https://borgbackup.readthedocs.io/en/stable/usage/prune.html
+    # - The following options should keep every archive within the last 14 days, and
+    #   weekly archives for 2 weeks that have a backup before that, then similarly for 6
+    #   monthly archives, and 3 yearly archives.
 
     borg prune --list --stats --prefix '{hostname}-' \
-               --keep-hourly 24 --keep-daily 7       \
-               --keep-weekly 4 --keep-monthly 6      \
+               --keep-within 14d                     \
+               --keep-weekly 2                       \
+               --keep-monthly 6                      \
                --keep-yearly 3                       \
                --info --show-rc ::
 
     # set aside stats block from log to prevent overwriting
-    bp_stats_fn="${BORG_CONFIG_DIR}/borg_stats_prune.txt"
+    bp_stats_fn="${BORG_CONFIG_DIR}/borg_log_prune-stats.txt"
     grep -B 2 -A 5 'INFO Deleted data' "$log_fn" > "${bp_stats_fn}.new"
 
     if [[ $(grep -c '^' "${bp_stats_fn}.new") -eq 8 ]]; then
@@ -309,7 +335,7 @@ function run_compact {
     ### --- Compact Repo ---
     # actually free repo disk space by compacting segments
     # - this is most useful after delete and prune operations
-    print_msg "Compacting repository ..."
+    print_msg "Starting compact ..."
 
     borg compact --threshold 1 \
                  --info --show-rc ::
@@ -318,7 +344,9 @@ function run_compact {
 
 ### --- Pre-run commands ---
 # mount repo if needed (erikson, mendeleev)
-[[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] && borg_mount-check
+[[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
+    && { print_msg "Mounting backup repo"
+         borg_mount-check; }
 
 
 ### --- Main function ---
@@ -335,18 +363,26 @@ done
 
 ### --- Post-run commands ---
 # unmount
-[[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] && borg_mount-check -u
+[[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
+    && { print_msg "Unmounting backup repo"
+         borg_mount-check -u; }
 
 # chown log files, if running under sudo
 # - should only be necessary for newly created files, but shouldn't hurt
-luser=$(logname)  # login name of user running sudo
+# - logname gives login name of user running sudo, but there is no logname when run
+#   with systemd
+luser=$(logname 2>/dev/null) \
+    || luser=$(echo "${BORG_CONFIG_DIR}" | sed -E 's|/[^/]*/([^/]*)/.*|\1|')
+
 luser_group=$(id -gn "$luser")
 
 if [[ $luser != $(id -un 0) ]]; then
-    for fn in "$BORG_CONFIG_DIR"/{borg_log.txt,borg_chfile*.txt,borg_stats*.txt}; do
+    for fn in "$BORG_CONFIG_DIR"/{borg_log.txt*,borg_log_chfile*.txt,borg_log_*-stats.txt,borg_go_systemd_out.log*}; do
         # some may not exist yet after test run
+        # - this is true even with nullglob, since brace expansion is not actually
+        #   globbing
         [[ -e $fn ]] && chown "$luser:$luser_group" $fn
     done
 fi
 
-print_msg "borg_go Done."
+print_msg "borg_go done."

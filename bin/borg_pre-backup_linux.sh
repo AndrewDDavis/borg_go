@@ -11,7 +11,9 @@
 
 # This script must be run as root for dpkg, and is likely run using `sudo -EH` during a
 # borg backup, meaning HOME will be root's home. Get the logged-in user's home instead:
-luser=$(logname)
+luser=$(logname 2>/dev/null) \
+    || luser=$(echo "${BORG_CONFIG_DIR}" | sed -E 's|/[^/]*/([^/]*)/.*|\1|')  # no logname when run with systemd $(id -un)
+
 luser_group=$(id -gn "$luser")
 luser_home=$(eval echo ~"$luser")  # works as variable replacement done before running
 

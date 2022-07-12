@@ -29,17 +29,19 @@ function print_msg {
 umask 027
 
 # find config dir based on logged-in user name (when running with sudo)
-luser="$(logname)"
-luser_home="$(eval echo -n ~$luser)"  # works b/c variable replacement done before running
+luser=$(logname 2>/dev/null) \
+    || luser=$(echo "${BORG_CONFIG_DIR}" | sed -E 's|/[^/]*/([^/]*)/.*|\1|')  # no logname when run with systemd $(id -un)
+
+luser_home=$(eval echo -n ~$luser)  # works b/c variable replacement done before running
 
 if [[ -z $BORG_CONFIG_DIR ]]; then
     BORG_CONFIG_DIR="${luser_home}/.config/borg"
 fi
 
 borg_logfile=borg_log.txt
-chf_fn=borg_chfiles.txt
+chf_fn=borg_log_chfiles.txt
 errf_fn=borg_errfiles.txt
-fs_fn=borg_chfile_sizes.txt
+fs_fn=borg_log_chfile_sizes.txt
 
 cd "$BORG_CONFIG_DIR" \
     || { print_msg ERROR "could not cd to config dir: '$BORG_CONFIG_DIR'"; exit 2; }
