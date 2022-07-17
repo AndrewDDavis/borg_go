@@ -7,9 +7,9 @@
 
 # Configure some common variables, shell options, and functions
 src_bn=$(basename -- "${BASH_SOURCE[0]}")
-src_dir=$(dirname -- "${BASH_SOURCE[0]}")
+src_dir=$(dirname -- "$(readlink "${BASH_SOURCE[0]}")")
 
-source "${src_dir}"/bgo_functions.sh
+source "$src_dir/bgo_functions.sh"
 
 # store these file and application lists in logged-in user's home
 def_luser  # luser, luser_group, luser_home from bgo_functions

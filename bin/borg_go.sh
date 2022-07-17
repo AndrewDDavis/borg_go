@@ -33,9 +33,10 @@ EOF
 
 # Configure some common variables, shell options, and functions
 src_bn=$(basename -- "${BASH_SOURCE[0]}")
-src_dir=$(dirname -- "${BASH_SOURCE[0]}")
+src_dir=$(dirname -- "$(readlink "${BASH_SOURCE[0]}")")  # resolve symlink
+bin_dir=$(dirname -- "${BASH_SOURCE[0]}")                # don't resolve symlink
 
-source "${src_dir}"/bgo_functions.sh
+source "$src_dir/bgo_functions.sh"
 
 
 # Parse arguments
@@ -85,7 +86,7 @@ export BORG_SECURITY_DIR=$HOME/.config/borg/security
 # sudoers. However, the scripts should be in the same directory as this one, so the
 # following should allow borg_go to be run as `sudo -EH $(which borg_go)` under those
 # circumstances, or as root with the relevant environment variables set.
-[[ $PATH == *"$src_dir"* ]] || export PATH=$src_dir:$PATH
+[[ $PATH == *"$bin_dir"* ]] || export PATH=$bin_dir:$PATH
 
 # Other required scripts should be linked in e.g. ~/.local/bin
 src_msg() { printf '%s\n' "$1 not found"$'\n'"you may need to run $src_dir/bgo_link.sh"; }
