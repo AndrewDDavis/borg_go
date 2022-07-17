@@ -42,7 +42,6 @@ borg_config_repo="../../Sync/Config/borg"
 def_mach_id     # mach_name and mach_os from bgo_functions
 
 
-
 # Parse arguments
 function arg_reqd {
     # confirm OPTARG got a non-null value
@@ -70,6 +69,7 @@ while getopts 'b:c:s:m:o:-:' OPT; do
 done
 shift $((OPTIND-1))  # remove parsed options and args
 
+
 echo "Setting up and making links..."
 set -vx  # verbose output of shell commands
 
@@ -82,7 +82,7 @@ cd "$local_bin_dir"
 ln -s "$borg_scripts_repo/borg_go.sh" borg_go
 ln -s "$borg_scripts_repo/bgo_check_mount.sh" bgo_check_mount
 ln -s "$borg_scripts_repo/bgo_chfile_sizes.sh" bgo_chfile_sizes
-ln -s "$borg_scripts_repo/bgo_prep_backup_${mach_os}.sh" bgo_prep_backup
+ln -s "$borg_scripts_repo/bgo_prep_backup.sh" bgo_prep_backup
 ln -s "$borg_scripts_repo/bgo_ping_hc.sh" bgo_ping_hc
 
 # check to make sure scripts are on PATH
