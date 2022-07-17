@@ -31,51 +31,12 @@ function print_usage { cat << EOF
 EOF
 }
 
-# Robust options
-set -o nounset     # fail on unset variables
-set -o errexit     # fail on non-zero return values
-set -o errtrace    # make shell functions, subshells, etc obey ERR trap
-set -o pipefail    # fail if any piped command fails
-shopt -s extglob   # allow extended pattern matching
-shopt -s nullglob  # non-matching glob patterns return null string
+# Configure some common variables, shell options, and functions
+src_bn=$(basename -- "${BASH_SOURCE[0]}")
+src_dir=$(dirname -- "${BASH_SOURCE[0]}")
 
+source "${src_dir}"/bgo_functions.sh
 
-# print_msg function
-# - prints log-style messages
-# - usage: print_msg ERROR "the script had a problem"
-script_bn=$(basename -- "$0")
-
-function print_msg {
-    local msg_type=INFO
-
-    [[ $1 == @(DEBUG|INFO|WARNING|ERROR) ]] \
-        && { msg_type=$1; shift; }
-
-    printf "%s %s %s\n" "$(date)" "$script_bn [$msg_type]" "$*" >&2
-}
-
-# handle interrupt and exceptions
-trap 'raise 2 "$script_bn was interrupted${FUNCNAME:+ (function $FUNCNAME)}"' INT TERM
-trap "$(cat << 'EOF'
-ec=$?
-ping_msg="Exception $ec in $0 at line $LINENO${FUNCNAME:+ (function stack: ${FUNCNAME[@]})}"
-hc_ping failure -m "$ping_msg"
-raise $ec "$ping_msg"
-EOF
-)" ERR
-
-# raise function
-# - prints error message and exits with code
-# - usage: raise 2 "valueError: foo should not be 0"
-#          raise w "file missing, that's not great but OK"
-function raise {
-    local msg_type=ERROR
-    local ec=${1:?"raise function requires exit code"}
-    [[ $ec == w ]] && { msg_type=WARNING; ec=0; }
-
-    print_msg "$msg_type" "${2:?"raise function requires message"}"
-    exit $ec
-}
 
 # Parse arguments
 [[ $# -eq 0 ]] && { print_usage; exit 0; }
@@ -124,26 +85,24 @@ export BORG_SECURITY_DIR=$HOME/.config/borg/security
 # sudoers. However, the scripts should be in the same directory as this one, so the
 # following should allow borg_go to be run as `sudo -EH $(which borg_go)` under those
 # circumstances, or as root with the relevant environment variables set.
-script_dn=$(dirname -- "$0")
-[[ $PATH == *"$script_dn"* ]] || export PATH=$script_dn:$PATH
-
+[[ $PATH == *"$src_dir"* ]] || export PATH=$src_dir:$PATH
 
 # Other required scripts should be linked in e.g. ~/.local/bin
-[[ -n $(command -v borg_chfile_sizes) ]] \
-    || raise 2 "borg_chfile_sizes not found"
+src_msg() { printf '%s\n' "$1 not found"$'\n'"you may need to run $src_dir/bgo_link.sh"; }
 
-[[ -n $(command -v hc_ping) ]] \
-    || raise 2 "hc_ping not found"
+[[ -n $(command -v bgo_chfile_sizes) ]] \
+    || raise 2 "$(src_msg bgo_chfile_sizes)"
 
-[[ -n $(command -v borg_pre-backup) ]] \
-    || raise 2 "borg_pre-backup not found"
+[[ -n $(command -v bgo_ping_hc) ]] \
+    || raise 2 "$(src_msg bgo_ping_hc)"
+
+[[ -n $(command -v bgo_prep_backup) ]] \
+    || raise 2 "$(src_msg bgo_prep_backup)"
 
 [[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
-    && { [[ -n $(command -v borg_mount-check) ]] || raise 2 "borg_mount-check not found"; }
+    && { [[ -n $(command -v bgo_check_mount) ]] \
+             || raise 2 "$(src_msg bgo_check_mount)"; }
 
-
-# Umask -- no write for group, no perms for other
-umask 027
 
 # Wipe out the log, then borg_logging.conf should append for this session
 # - try to preserve ownership and file mode
@@ -165,8 +124,7 @@ function handle_borg_ec {
         print_msg WARNING "$ping_msg"
     else
         # trigger the trap error handling
-        function rtn { return $1; }
-        rtn $ec
+        (exit $ec)
     fi
 }
 
@@ -177,10 +135,10 @@ function run_create {
     local ping_msg
 
     print_msg "Starting backup ..."
-    hc_ping start -m "borg cmds: ${cmd_array[*]}"
+    bgo_ping_hc start -m "borg cmds: ${cmd_array[*]}"
 
     print_msg "- running pre-backup script"
-    borg_pre-backup
+    bgo_prep_backup
 
     # use --dry-run if test was called
     if printf '%s\n' "${cmd_array[@]}" | grep -qFx -e 'test'; then
@@ -214,7 +172,7 @@ function run_create {
     else
         # record file sizes for backed-up files
         print_msg "- recording file sizes of changed files"
-        borg_chfile_sizes
+        bgo_chfile_sizes
 
         # set aside stats block from log to prevent overwriting
         bc_stats_fn="$BORG_CONFIG_DIR/borg_log_create-stats.txt"
@@ -232,7 +190,7 @@ function run_create {
     fi
 
     # signal successful backup
-    hc_ping success -m "$ping_msg"
+    bgo_ping_hc success -m "$ping_msg"
 
     # Old code to read paths to backup into an array
     # This method has the advantage of shell globbing on the command line
@@ -316,7 +274,7 @@ function run_prune {
     fi
 
     # signal successful backup
-    hc_ping success -m "$ping_msg"
+    bgo_ping_hc success -m "$ping_msg"
 }
 
 function run_check {
@@ -346,7 +304,7 @@ function run_compact {
 # mount repo if needed (erikson, mendeleev)
 [[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
     && { print_msg "Mounting backup repo"
-         borg_mount-check; }
+         bgo_check_mount; }
 
 
 ### --- Main function ---
@@ -365,23 +323,18 @@ done
 # unmount
 [[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
     && { print_msg "Unmounting backup repo"
-         borg_mount-check -u; }
+         bgo_check_mount -u; }
 
 # chown log files, if running under sudo
 # - should only be necessary for newly created files, but shouldn't hurt
-# - logname gives login name of user running sudo, but there is no logname when run
-#   with systemd
-luser=$(logname 2>/dev/null) \
-    || luser=$(echo "${BORG_CONFIG_DIR}" | sed -E 's|/[^/]*/([^/]*)/.*|\1|')
-
-luser_group=$(id -gn "$luser")
+def_luser  # luser, luser_group, luser_home from bgo_functions
 
 if [[ $luser != $(id -un 0) ]]; then
     for fn in "$BORG_CONFIG_DIR"/{borg_log.txt*,borg_log_chfile*.txt,borg_log_*-stats.txt,borg_go_systemd_out.log*}; do
         # some may not exist yet after test run
         # - this is true even with nullglob, since brace expansion is not actually
         #   globbing
-        [[ -e $fn ]] && chown "$luser:$luser_group" $fn
+        [[ -e $fn ]] && chown "$luser":"$luser_group" $fn
     done
 fi
 

@@ -1,37 +1,57 @@
 #!/bin/bash
 
-# Make a list of installed software and packages for later reinstallation
+# Make a list of installed software and packages, which can be used for later
+# reinstallation in the case of disk failure.
 #
-# Source for dpkg cmd: http://www.webupd8.org/2010/03/2-ways-of-reinstalling-all-of-your.html
-#
-# To restore the list, use:
-#  sudo dpkg --set-selections < installed-applications.txt
-#  sudo apt-get -y update
-#  sudo apt-get dselect-upgrade
+# Part of the borg_go project, see: https://github.com/AndrewDDavis/borg_go
 
-# This script must be run as root for dpkg, and is likely run using `sudo -EH` during a
-# borg backup, meaning HOME will be root's home. Get the logged-in user's home instead:
-luser=$(logname 2>/dev/null) \
-    || luser=$(echo "${BORG_CONFIG_DIR}" | sed -E 's|/[^/]*/([^/]*)/.*|\1|')  # no logname when run with systemd $(id -un)
+# Configure some common variables, shell options, and functions
+src_bn=$(basename -- "${BASH_SOURCE[0]}")
+src_dir=$(dirname -- "${BASH_SOURCE[0]}")
 
-luser_group=$(id -gn "$luser")
-luser_home=$(eval echo ~"$luser")  # works as variable replacement done before running
+source "${src_dir}"/bgo_functions.sh
 
-# location to store these file and application lists
+# store these file and application lists in logged-in user's home
+def_luser  # luser, luser_group, luser_home from bgo_functions
+
 bakdir="$luser_home/.backup"
 [[ -d "$bakdir" ]] || { echo "bakdir not found: $bakdir"; exit 2; }
 
 # create a list of what's in /usr/local
-echo "/usr/local/"$'\n'          > "$bakdir"/usr-local-list.txt
-/bin/ls -l /usr/local/          >> "$bakdir"/usr-local-list.txt
-echo $'\n\n'"/usr/local/*"$'\n' >> "$bakdir"/usr-local-list.txt
-/bin/ls -l /usr/local/*         >> "$bakdir"/usr-local-list.txt
+echo $'/usr/local/\n'        > "$bakdir"/usr-local-list.txt
+/bin/ls -l /usr/local/      >> "$bakdir"/usr-local-list.txt
+echo $'\n\n/usr/local/*\n'  >> "$bakdir"/usr-local-list.txt
+/bin/ls -l /usr/local/*     >> "$bakdir"/usr-local-list.txt
 
-# create a list of installed packages from dpkg
-dpkg --get-selections > "$bakdir"/dpkg-installed-applications.txt
+# back up "Session Buddy" backup files of the Chrome state, if found
+[[ -n $(compgen -G "$luser_home"/Downloads/session_buddy_backup*.json) ]] \
+    && /bin/mv "$luser_home"/Downloads/session_buddy_backup*.json "$bakdir"
 
-# specifically note manually installed packages
-apt-mark showmanual > "$bakdir"/apt-manual-packages.txt
+
+def_mach_id  # mach_name and mach_os from bgo_functions
+
+if [[ $mach_os == linux ]]; then
+
+    # create a list of installed packages from dpkg
+    # - Source for dpkg cmd:
+    #   http://www.webupd8.org/2010/03/2-ways-of-reinstalling-all-of-your.html
+    dpkg --get-selections > "$bakdir"/dpkg-installed-applications.txt
+
+    # specifically note manually installed packages
+    apt-mark showmanual > "$bakdir"/apt-manual-packages.txt
+
+    # To restore the dpkg list, use:
+    #  sudo dpkg --set-selections < installed-applications.txt
+    #  sudo apt-get -y update
+    #  sudo apt-get dselect-upgrade
+
+elif [[ $mach_os == macos ]]; then
+
+    # create a list of installed applications
+    /bin/ls -l /Applications/ /Users/*/Applications/ > "$bakdir"/applications-list.txt
+else
+    raise 2 "Undefined mach_os: $mach_os"
+fi
 
 # chown these files to user
-chown -R "$luser:$luser_group" "$bakdir"
+chown -R "$luser":"$luser_group" "$bakdir"

@@ -25,58 +25,23 @@ function print_usage { cat << EOF
 EOF
 }
 
-# Robust options
-set -o nounset    # fail on unset variables
-set -o errexit    # fail on non-zero return values
-set -o errtrace   # make shell functions, subshells, etc obey ERR trap
-set -o pipefail   # fail if any piped command fails
-shopt -s extglob  # allow extended pattern matching
+# Configure some common variables, shell options, and functions
+src_bn=$(basename -- "${BASH_SOURCE[0]}")
+src_dir=$(dirname -- "${BASH_SOURCE[0]}")
 
-# print_msg function
-# - prints log-style messages
-# - usage: print_msg ERROR "the script had a problem"
-script_bn=$(basename -- "$0")
-
-function print_msg {
-    local msg_type=INFO
-
-    [[ $1 == @(DEBUG|INFO|WARNING|ERROR) ]] \
-        && { msg_type=$1; shift; }
-
-    printf >&2 "%s %s %s\n" "$(date)" "$script_bn [$msg_type]" "$*"
-}
-
-# handle interrupt and exceptions
-trap 'raise 2 "$script_bn was interrupted${FUNCNAME:+ (function $FUNCNAME)}"' INT TERM
-trap 'raise $? "Exception $? in $0 at line $LINENO${FUNCNAME:+ (function stack: ${FUNCNAME[@]})}"' ERR
-
-# raise function
-# - prints error message and exits with code
-# - usage: raise 2 "valueError: foo should not be 0"
-#          raise w "file missing, that's not great but OK"
-function raise {
-    local msg_type=ERROR
-    local ec=${1:?"raise function requires exit code"}
-    [[ $ec == w ]] && { msg_type=WARNING; ec=0; }
-
-    print_msg "$msg_type" "${2:?"raise function requires message"}"
-    exit $ec
-}
+source "${src_dir}"/bgo_functions.sh
 
 
 # Default parameter values
 local_bin_dir=~/.local/bin
 [[ -n ${BORG_CONFIG_DIR-} ]] || raise 2 "BORG_CONFIG_DIR not set"
 
-borg_scripts_repo="../../Sync/Code/Backup/borg_scripts/bin"
+borg_scripts_repo="../../Sync/Code/Backup/borg_go/bin"
 borg_config_repo="../../Sync/Config/borg"
 
-mach_name=$(hostname -s)
-mach_name=${mach_name,,}    # lowercase
+def_mach_id     # mach_name and mach_os from bgo_functions
 
-mach_os=$(uname -s)
-mach_os=${mach_os,,}
-[[ $mach_os == "darwin" ]] && mach_os=macos
+
 
 # Parse arguments
 function arg_reqd {
@@ -106,7 +71,7 @@ done
 shift $((OPTIND-1))  # remove parsed options and args
 
 echo "Setting up and making links..."
-set -x  # verbose output of shell commands
+set -vx  # verbose output of shell commands
 
 # Link scripts
 # - working in ~/.local/bin/ by default
@@ -114,13 +79,11 @@ set -x  # verbose output of shell commands
 cd "$local_bin_dir"
 [[ -d $borg_scripts_repo ]] || raise 2 "borg_scripts_repo not found: '$borg_scripts_repo'"
 
-ln -s "$borg_scripts_repo/borg_chfile_sizes.sh" borg_chfile_sizes
 ln -s "$borg_scripts_repo/borg_go.sh" borg_go
-ln -s "$borg_scripts_repo/borg_pre-backup_${mach_os}.sh" borg_pre-backup
-ln -s "$borg_scripts_repo/hc_ping.sh" hc_ping
-
-[[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
-    && ln -s "$borg_scripts_repo/borg_mount-check.sh" borg_mount-check
+ln -s "$borg_scripts_repo/bgo_check_mount.sh" bgo_check_mount
+ln -s "$borg_scripts_repo/bgo_chfile_sizes.sh" bgo_chfile_sizes
+ln -s "$borg_scripts_repo/bgo_prep_backup_${mach_os}.sh" bgo_prep_backup
+ln -s "$borg_scripts_repo/bgo_ping_hc.sh" bgo_ping_hc
 
 # check to make sure scripts are on PATH
 [[ -n $(command -v borg_go) ]] || raise 2 "borg_go not on path"
@@ -137,4 +100,4 @@ ln -s "$borg_config_repo/borg_patterns_${mach_name}_${mach_os}.txt" borg_pattern
 ln -s "$borg_config_repo/borg_recursion_roots_${mach_name}_${mach_os}.txt" borg_recursion_roots.txt
 ln -s "$borg_config_repo/healthchecks_UUID_${mach_name}.txt" healthchecks_UUID.txt
 
-set +x
+set +vx

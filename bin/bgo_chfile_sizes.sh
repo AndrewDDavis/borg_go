@@ -9,30 +9,18 @@
 
 # v0.1 (Jun 2022) by Andrew Davis (addavis@gmail.com)
 
-# log-style messages
-script_bn=$(basename -- "$0")
-function print_msg {
-    # usage e.g.: print_msg ERROR "the script had a problem"
-    local msg_type
+# Configure some common variables, shell options, and functions
+src_bn=$(basename -- "${BASH_SOURCE[0]}")
+src_dir=$(dirname -- "${BASH_SOURCE[0]}")
 
-    [[ $1 == DEBUG || $1 == INFO || $1 == WARNING || $1 == ERROR ]] \
-        && { msg_type=$1; shift; } \
-        || { msg_type=INFO; }
+source "${src_dir}"/bgo_functions.sh
 
-    printf "%s %s %s\n" "$(date)" "$script_bn [$msg_type]" "$*" >&2
-}
 
 # requires root to reliably stat all files
 [[ $(id -u) -eq 0 ]] || { print_msg ERROR "root or sudo required."; exit 2; }
 
-# Umask -- no write for group, nothing for other
-umask 027
-
 # find config dir based on logged-in user name (when running with sudo)
-luser=$(logname 2>/dev/null) \
-    || luser=$(echo "${BORG_CONFIG_DIR}" | sed -E 's|/[^/]*/([^/]*)/.*|\1|')  # no logname when run with systemd $(id -un)
-
-luser_home=$(eval echo -n ~$luser)  # works b/c variable replacement done before running
+def_luser  # luser, luser_group, luser_home from bgo_functions
 
 if [[ -z $BORG_CONFIG_DIR ]]; then
     BORG_CONFIG_DIR="${luser_home}/.config/borg"
@@ -116,5 +104,5 @@ sort -rh "$fs_fn" | head -n 12 | sed 's/^/    /'
 # [[ $1 == --noclean ]] || /bin/rm $chf_fn $fs_fn
 
 # chown instead
-chown $luser "$chf_fn" "$fs_fn"
+chown "$luser":"$luser_group" "$chf_fn" "$fs_fn"
 # chmod 0640 "$chf_fn" "$fs_fn"

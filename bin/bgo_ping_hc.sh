@@ -8,14 +8,14 @@
 
 function print_usage { cat << EOF
 
-  hc_ping
-  -------
+  bgo_ping_hc
+  -----------
 
   This script sends a signal to the relevant healthchecks.io URL to indicate
   progress or errors during a back-up with BorgBackup. It is normally called
   from borg_go.
 
-  Usage: hc_ping <command> [optional messages]
+  Usage: bgo_ping_hc <command> [optional messages]
 
   Commands:
     failure   -> signals that job has failed
@@ -31,43 +31,13 @@ function print_usage { cat << EOF
 EOF
 }
 
-# Robust options
-set -o nounset    # fail on unset variables
-set -o errexit    # fail on non-zero return values
-set -o errtrace   # make shell functions, subshells, etc obey ERR trap
-set -o pipefail   # fail if any piped command fails
-shopt -s extglob  # allow extended pattern matching
 
-# print_msg function
-# - prints log-style messages
-# - usage: print_msg ERROR "the script had a problem"
-script_bn=$(basename -- "$0")
+# Configure some common variables, shell options, and functions
+src_bn=$(basename -- "${BASH_SOURCE[0]}")
+src_dir=$(dirname -- "${BASH_SOURCE[0]}")
 
-function print_msg {
-    local msg_type=INFO
+source "${src_dir}"/bgo_functions.sh
 
-    [[ $1 == @(DEBUG|INFO|WARNING|ERROR) ]] \
-        && { msg_type=$1; shift; }
-
-    printf "%s %s %s\n" "$(date)" "$script_bn [$msg_type]" "$*" >&2
-}
-
-# handle interrupt and exceptions
-trap 'raise 2 "$script_bn was interrupted${FUNCNAME:+ (function $FUNCNAME)}"' INT TERM
-trap 'raise $? "Exception in $0 at line $LINENO${FUNCNAME:+ (function $FUNCNAME)}"' ERR
-
-# raise function
-# - prints error message and exits with code
-# - usage: raise 2 "valueError: foo should not be 0"
-#          raise w "file missing, that's not great but OK"
-function raise {
-    local msg_type=ERROR
-    local ec=${1:?"raise function requires exit code"}
-    [[ $ec == w ]] && { msg_type=WARNING; ec=0; }
-
-    print_msg "$msg_type" "${2:?"raise function requires message"}"
-    exit $ec
-}
 
 # Parse and check arguments
 [[ $# -eq 0 ]] && { print_usage; exit 0; }
