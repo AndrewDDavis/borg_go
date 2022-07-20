@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script is used for working with borg repos stored on the hippocampus
 # NAS (for mendeleev and erikson).

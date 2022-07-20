@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Make a list of installed software and packages, which can be used for later
 # reinstallation in the case of disk failure.
@@ -6,9 +6,11 @@
 # Part of the borg_go project, see: https://github.com/AndrewDDavis/borg_go
 
 # Configure some common variables, shell options, and functions
-src_bn=$(basename -- "${BASH_SOURCE[0]}")
-src_dir=$(dirname -- "$(readlink "${BASH_SOURCE[0]}")")
+BS0="${BASH_SOURCE[0]}"
+exc_fn=$(basename -- "$BS0")
+exc_dir=$(dirname -- "$BS0")
 
+src_dir=$(python -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
 source "$src_dir/bgo_functions.sh"
 
 # store these file and application lists in logged-in user's home
@@ -23,9 +25,13 @@ echo $'/usr/local/\n'        > "$bakdir"/usr-local-list.txt
 echo $'\n\n/usr/local/*\n'  >> "$bakdir"/usr-local-list.txt
 /bin/ls -l /usr/local/*     >> "$bakdir"/usr-local-list.txt
 
-# back up "Session Buddy" backup files of the Chrome state, if found
-[[ -n $(compgen -G "$luser_home"/Downloads/session_buddy_backup*.json) ]] \
-    && /bin/mv "$luser_home"/Downloads/session_buddy_backup*.json "$bakdir"
+# back up "Session Buddy" backup files of the Chrome state, if found (nullglob is set)
+# [[ -n $(compgen -G "$luser_home/Downloads/session_buddy_backup*.json") ]] \
+#     && /bin/mv "$luser_home"/Downloads/session_buddy_backup*.json "$bakdir"
+for fn in "$luser_home"/Downloads/session_buddy_backup*.json; do
+  /bin/mv "$fn" "$bakdir"
+done
+
 
 
 def_mach_id  # mach_name and mach_os from bgo_functions

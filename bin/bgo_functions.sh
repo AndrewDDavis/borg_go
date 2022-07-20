@@ -5,11 +5,17 @@
 #
 # This file is meant to be sourced, not run. Typical syntax:
 #
-# Configure some common variables, shell options, and functions
-# src_bn=$(basename -- "${BASH_SOURCE[0]}")
-# src_dir=$(dirname -- "$(readlink "${BASH_SOURCE[0]}")")
+# # Configure some common variables, shell options, and functions
+# # - BASH_SOURCE (and 0) likely refer to symlink
+# # - exc_fn and exc_dir refer to the executable path as called, while
+# #   src_dir refers to the resolved absolute canonical path to the script dir
+# BS0="${BASH_SOURCE[0]}"
+# exc_fn=$(basename -- "$BS0")
+# exc_dir=$(dirname -- "$BS0")
 #
+# src_dir=$(python -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
 # source "$src_dir/bgo_functions.sh"
+
 
 # Set preferred shell options for more robust scripts
 set -o nounset     # fail on unset variables
@@ -30,7 +36,7 @@ print_msg() {
     [[ $1 == @(DEBUG|INFO|WARNING|ERROR) ]] \
         && { msg_type=$1; shift; }
 
-    printf >&2 "%s %s %s\n" "$(date)" "${src_bn--} [$msg_type]" "$*"
+    printf >&2 "%s %s %s\n" "$(date)" "${exc_fn--} [$msg_type]" "$*"
 }
 
 raise() {
@@ -46,8 +52,8 @@ raise() {
     exit $ec
 }
 
-# Handle interrupt and exceptions
-trap -- 'raise 2 "${src_bn--} was interrupted${FUNCNAME:+ (function $FUNCNAME)}"' INT TERM
+# Handle interrupt and exceptions, giving useful debugging output
+trap -- 'raise 2 "${exc_fn--} was interrupted${FUNCNAME:+ (function $FUNCNAME)}"' INT TERM
 trap -- 'ec=$?
 ping_msg="Exception $ec in $0 at line $LINENO${FUNCNAME:+ (function stack: ${FUNCNAME[@]})}"
 [[ $0 == borg_go?(.sh) ]] && bgo_ping_hc failure -m "$ping_msg"
@@ -76,4 +82,17 @@ def_luser() {
 
     luser_group=$(id -gn "$luser")
     luser_home=$(eval echo ~"$luser")  # NB variable replacement done _before_ execution
+}
+
+
+array_has() {
+    # Check whether array contains value matching regex pattern
+    # - NB array (arg1) is passed by reference (i.e. name), and
+    #   pattern (arg2) must match full array entry
+    local -n tst_arr=$1
+    local tst_pat=$2
+
+    printf '%s\n' "${tst_arr[@]}" | grep -qxE -e "^${tst_pat}\$"  \
+        && return 0  \
+        || return 1
 }

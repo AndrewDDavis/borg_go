@@ -32,10 +32,14 @@ EOF
 }
 
 # Configure some common variables, shell options, and functions
-src_bn=$(basename -- "${BASH_SOURCE[0]}")
-src_dir=$(dirname -- "$(readlink "${BASH_SOURCE[0]}")")  # resolve symlink
-bin_dir=$(dirname -- "${BASH_SOURCE[0]}")                # don't resolve symlink
+# - BASH_SOURCE (and 0) likely refer to symlink
+# - exc_fn and exc_dir refer to the executable path as called, while
+#   src_dir refers to the resolved absolute canonical path to the script dir
+BS0="${BASH_SOURCE[0]}"
+exc_fn=$(basename -- "$BS0")
+exc_dir=$(dirname -- "$BS0")
 
+src_dir=$(python -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
 source "$src_dir/bgo_functions.sh"
 
 
@@ -58,18 +62,18 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# Check args
-if ! printf '%s\n' "${cmd_array[@]}" | grep -qxE -e '^(create|test|prune|check)$'; then
-
+# Check args and root
+if ! array_has cmd_array '(create|test|prune|check)'; then
     print_msg "No actions to perform, stay frosty"
     exit 0
-
-# elif printf '%s\n' "${cmd_array[@]}" | grep -qFx -e 'create'; then
-else
-    # create requires root to read all files
-    # - generally a good idea to run as root when accessing the repo otherwise
-    [[ $(id -u) -eq 0 ]] || { raise 2 "root or sudo required."; }
 fi
+
+# borg create requires root to read all files
+# - generally a good idea to run as root when making changes to the repo otherwise
+#   (i.e. anything beyond borg list or borg info), to prevent permissions issues in
+#   the security and cache dirs.
+[[ $(id -u) -eq 0 ]] || { raise 2 "root or sudo required."; }
+
 
 
 # Environment variables
@@ -80,13 +84,14 @@ fi
 export BORG_CACHE_DIR=$HOME/.cache/borg
 export BORG_SECURITY_DIR=$HOME/.config/borg/security
 
-# PATH may have been reset, and the supporting scripts of the borg_go package won't be
-# found. This may happen if running e.g. from launchd or cron as straight root, rather
-# than sudo, or if user can't or doesn't want to use SETENV or override secure_path in
-# sudoers. However, the scripts should be in the same directory as this one, so the
-# following should allow borg_go to be run as `sudo -EH $(which borg_go)` under those
-# circumstances, or as root with the relevant environment variables set.
-[[ $PATH == *"$bin_dir"* ]] || export PATH=$bin_dir:$PATH
+# If PATH was reset, the borg_go supporting scripts may not be found.
+# - This may occur if running e.g. from launchd/systemd/cron as straight root rather
+#   than sudo, or if not using SETENV or override secure_path in sudoers.
+# - However, the executables (which can be symlinks to the scripts) should be in the
+#   same directory as this one, so the following should still allow borg_go to be run
+#   simply as e.g. `sudo -EH $(which borg_go)`, or as root with the relevant
+#   environment variables set.
+[[ $PATH == *"$exc_dir"* ]] || export PATH=$exc_dir:$PATH
 
 # Other required scripts should be linked in e.g. ~/.local/bin
 src_msg() { printf '%s\n' "$1 not found"$'\n'"you may need to run $src_dir/bgo_link.sh"; }
