@@ -40,7 +40,7 @@ EOF
 # - BASH_SOURCE (and 0) likely refer to symlink
 # - exc_fn and exc_dir refer to the executable path as called, while
 #   src_dir refers to the resolved absolute canonical path to the script dir
-BS0="${BASH_SOURCE[0]}"
+BS0=${BASH_SOURCE[0]}
 exc_fn=$(basename -- "$BS0")
 exc_dir=$(dirname -- "$BS0")
 
@@ -118,7 +118,7 @@ src_msg() { printf '%s\n' "$1 not found"$'\n'"you may need to run $src_dir/bgo_l
 # Wipe out the log, then borg_logging.conf should append for this session
 # - try to preserve ownership and file mode
 log_fn=$BORG_CONFIG_DIR/borg_log.txt
-/bin/cp -pf "$log_fn" "${log_fn}.1" && gzip -f "${log_fn}.1"
+/bin/cp -pf "$log_fn" "$log_fn.1" && gzip -f "$log_fn.1"
 printf '' > "$log_fn"
 
 
@@ -184,15 +184,16 @@ function run_create {
 
         # set aside stats block from log to prevent overwriting
         bc_stats_fn="$BORG_CONFIG_DIR/borg_log_create-stats.txt"
-        grep -B 6 -A 10 'INFO Duration' "$log_fn" > "${bc_stats_fn}.new"
+        grep -B 6 -A 10 'INFO Duration' "$log_fn" > "$bc_stats_fn.new"
 
-        if [[ $(grep -c '^' "${bc_stats_fn}.new") -eq 17 ]]; then
+        if [[ $(grep -c '^' "$bc_stats_fn.new") -eq 17 ]]; then
 
             print_msg "- recording stats block"
-            /bin/mv "${bc_stats_fn}.new" "$bc_stats_fn"
+            /bin/mv "$bc_stats_fn.new" "$bc_stats_fn"
+            ping_msg+="borg-create stats:"$'\n'
             ping_msg+=$(< "$bc_stats_fn")
         else
-            ping_msg+="stats block from log not as expected: $BORG_CONFIG_DIR/${bc_stats_fn}.new"
+            ping_msg+="borg-create stats block from log not as expected: $BORG_CONFIG_DIR/$bc_stats_fn.new"
             print_msg WARNING "$ping_msg"
         fi
     fi
@@ -214,12 +215,12 @@ function run_create {
 
     #     incl_files+=($line)
 
-    # done < "${BORG_CONFIG_DIR}/borg_includes.txt"
+    # done < "$BORG_CONFIG_DIR/borg_includes.txt"
 
     # borg create --info --show-rc                               \
     #     --list --filter 'AME' --stats                          \
     #     --exclude-caches --exclude-if-present .nobackup        \
-    #     --exclude-from "${BORG_CONFIG_DIR}/borg_excludes.txt"  \
+    #     --exclude-from "$BORG_CONFIG_DIR/borg_excludes.txt"  \
     #     '::{hostname}-{now:%Y-%m-%dT%H.%M.%S}'                 \
     #     "${incl_files[@]}"
 }
@@ -267,20 +268,22 @@ function run_prune {
 
     if [[ -n ${dry_run-} ]]; then
         # stats only supported without dry-run
-        ping_msg+="no stats from prune --dry-run"
+        ping_msg="no stats from prune --dry-run"$'\n'
 
     else
         # set aside stats block from log to prevent overwriting
-        bp_stats_fn="${BORG_CONFIG_DIR}/borg_log_prune-stats.txt"
-        grep -B 2 -A 5 'INFO Deleted data' "$log_fn" > "${bp_stats_fn}.new"
+        bp_stats_fn="$BORG_CONFIG_DIR/borg_log_prune-stats.txt"
+        grep -B 2 -A 5 'INFO Deleted data' "$log_fn" > "$bp_stats_fn.new"
 
-        if [[ $(grep -c '^' "${bp_stats_fn}.new") -eq 8 ]]; then
+        if [[ $(grep -c '^' "$bp_stats_fn.new") -eq 8 ]]; then
 
             print_msg "- recording stats block"
-            /bin/mv "${bp_stats_fn}.new" "$bp_stats_fn"
-            ping_msg=$(< "$bp_stats_fn")
+            /bin/mv "$bp_stats_fn.new" "$bp_stats_fn"
+            ping_msg="borg-prune stats:"$'\n'
+            ping_msg+=$(< "$bp_stats_fn")
         else
-            ping_msg="stats block from log not as expected: ${BORG_CONFIG_DIR}/${bp_stats_fn}.new"
+            ping_msg="borg-prune stats block from log not as expected:"$'\n'
+            ping_msg+="$BORG_CONFIG_DIR/$bp_stats_fn.new"$'\n'
             print_msg WARNING "$ping_msg"
         fi
     fi
