@@ -44,7 +44,7 @@ raise() {
     # - usage: raise 2 "valueError: foo should not be 0"
     #          raise w "file missing, that's not great but OK"
     local ec=${1:?"raise function requires exit code"}
-    local msg_body="${2:?"raise function requires message"}"
+    local msg_body=${2:?"raise function requires message"}
     local msg_type=ERROR
     [[ $ec == w ]] && { msg_type=WARNING; ec=0; }
 
@@ -57,7 +57,7 @@ trap -- 'raise 2 "${exc_fn--} was interrupted${FUNCNAME:+ (function $FUNCNAME)}"
 trap -- 'ec=$?
 ping_msg="Exception $ec in $0 at line $LINENO${FUNCNAME:+ (function stack: ${FUNCNAME[@]})}"
 [[ $0 == borg_go?(.sh) ]] && bgo_ping_hc failure -m "$ping_msg"
-raise $ec $ping_msg' ERR
+raise $ec "$ping_msg"' ERR
 
 
 def_mach_id() {
@@ -75,24 +75,15 @@ def_mach_id() {
 def_luser() {
     # These scripts are likely run using `sudo -EH` during a borg backup, meaning HOME
     # will be root's home. We can define the login name of user running sudo using
-    # logname; however, there is no logname when run with systemd/launchd, so grab the
-    # username from BORG_CONFIG_DIR:
-    luser=$(logname 2>/dev/null) \
-        || luser=$(echo "${BORG_CONFIG_DIR}" | sed -E 's|/[^/]*/([^/]*)/.*|\1|')
+    # logname (checks owner of the tty)
+    luser=$(logname 2>/dev/null) || true
 
-    luser_group=$(id -gn "$luser")
-    luser_home=$(eval echo ~"$luser")  # NB variable replacement done _before_ execution
-}
+    # When running with systemd or launchd, Linux produces an error code, and macOS
+    # produces /var/empty for the home dir. In those cases, grab the username from
+    # BORG_CONFIG_DIR:
+    [[ -z $luser || ~$luser == /var/empty ]] \
+        && luser=$(sed -E 's|/[^/]*/([^/]*)/.*|\1|' <<<"$BORG_CONFIG_DIR")
 
-
-array_has() {
-    # Check whether array contains value matching regex pattern
-    # - NB array (arg1) is passed by reference (i.e. name), and
-    #   pattern (arg2) must match full array entry
-    local -n tst_arr=$1
-    local tst_pat=$2
-
-    printf '%s\n' "${tst_arr[@]}" | grep -qxE -e "^${tst_pat}\$"  \
-        && return 0  \
-        || return 1
+    luser_group=$(id -gn $luser)
+    luser_home=$(eval echo ~$luser)  # NB variable replacement done _before_ execution
 }

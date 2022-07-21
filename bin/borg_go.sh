@@ -13,14 +13,19 @@ function print_usage { cat << EOF
   This script runs BorgBackup with the typical configuration and command options to
   create, prune, and check backups.
 
-  Usage: borg_go <commands ...>
+  Usage: borg_go [options] <command1 command2 ...>
 
   Commands:
     create  -> create a new backup archive in the default repository
-    test    -> run create with --dry-run to see what would be backed up
     prune   -> remove old archives according to rules
     check   -> check integrity of repo and latest archive
     compact -> save space in repo; runs automatically after prune
+
+  Options:
+    -n | --dry-run -> run create and/or prune without changing the repo, to see what
+                      would be backed up or removed. check and compact are not affected
+                      by the dry-run option, but compact will not run automatically
+                      after prune on a dry-run.
 
   Configuration:
     - set env vars BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
@@ -53,6 +58,8 @@ while [ $# -gt 0 ]; do
     case $1 in
         create | test | prune | check | compact )
             cmd_array+=($1) ;;
+        -n | --dry-run )
+            dry_run="--dry-run" ;;
         -h | -help | --help )
             print_usage
             exit 0 ;;
@@ -63,10 +70,8 @@ while [ $# -gt 0 ]; do
 done
 
 # Check args and root
-if ! array_has cmd_array '(create|test|prune|check)'; then
-    print_msg "No actions to perform, stay frosty"
-    exit 0
-fi
+printf '%s\n' "${cmd_array[@]}" | grep -qxE -e "^(create|test|prune|check)\$"  \
+    || raise w print_msg "No actions to perform, stay frosty"
 
 # borg create requires root to read all files
 # - generally a good idea to run as root when making changes to the repo otherwise
@@ -141,15 +146,12 @@ function run_create {
     local ping_msg
 
     print_msg "Starting backup ..."
-    bgo_ping_hc start -m "borg cmds: ${cmd_array[*]}"
+    bgo_ping_hc start -m "borg ${dry_run-$'\b'} cmds: ${cmd_array[*]}"
 
     print_msg "- running pre-backup script"
     bgo_prep_backup
 
-    # use --dry-run if test was called
-    if printf '%s\n' "${cmd_array[@]}" | grep -qFx -e 'test'; then
-        dry_run="--dry-run"
-
+    if [[ -n ${dry_run-} ]]; then
         # dry-run affects item flags in log
         filters='x-'
     else
@@ -157,7 +159,7 @@ function run_create {
     fi
 
     # borg call
-    print_msg "- calling borg ${dry_run-$'\b'}"
+    print_msg "- calling borg create ${dry_run-$'\b'}"
     # - add -p for progress
     # - compression is lz4 by default
     # - using || to catch exit code 1, which borg uses for warnings
@@ -173,7 +175,7 @@ function run_create {
 
     if [[ -n ${dry_run-} ]]; then
         # stats and changed files only supported without dry-run
-        ping_msg+="--dry-run"
+        ping_msg+="no stats from create --dry-run"
 
     else
         # record file sizes for backed-up files
@@ -230,10 +232,8 @@ function run_prune {
 
     print_msg "Starting prune ..."
 
-    # TODO: add test/dry-run option to run `prune -v --list --dry-run ...`
-    #       deal with missing stats block for dry-run as in create
-
     # borg command
+    print_msg "- calling borg prune ${dry_run-$'\b'}"
     # - The '{hostname}-' prefix limits prune's operation to this machine's archives
     # - N.B. the keep rules don't operate exactly as you may expect, because they don't
     # count intervals in which there are no backups. E.g., if you only did 7 backups in
@@ -258,28 +258,34 @@ function run_prune {
     #   weekly archives for 2 weeks that have a backup before that, then similarly for 6
     #   monthly archives, and 3 yearly archives.
 
-    borg prune --list --stats --prefix '{hostname}-' \
-               --keep-within 14d                     \
-               --keep-weekly 2                       \
-               --keep-monthly 6                      \
-               --keep-yearly 3                       \
+    borg prune ${dry_run-} --list --stats --prefix '{hostname}-' \
+               --keep-within 14d                                 \
+               --keep-weekly 2                                   \
+               --keep-monthly 6                                  \
+               --keep-yearly 3                                   \
                --info --show-rc ::
 
-    # set aside stats block from log to prevent overwriting
-    bp_stats_fn="${BORG_CONFIG_DIR}/borg_log_prune-stats.txt"
-    grep -B 2 -A 5 'INFO Deleted data' "$log_fn" > "${bp_stats_fn}.new"
+    if [[ -n ${dry_run-} ]]; then
+        # stats only supported without dry-run
+        ping_msg+="no stats from prune --dry-run"
 
-    if [[ $(grep -c '^' "${bp_stats_fn}.new") -eq 8 ]]; then
-
-        print_msg "- recording stats block"
-        /bin/mv "${bp_stats_fn}.new" "$bp_stats_fn"
-        ping_msg=$(< "$bp_stats_fn")
     else
-        ping_msg="stats block from log not as expected: ${BORG_CONFIG_DIR}/${bp_stats_fn}.new"
-        print_msg WARNING "$ping_msg"
+        # set aside stats block from log to prevent overwriting
+        bp_stats_fn="${BORG_CONFIG_DIR}/borg_log_prune-stats.txt"
+        grep -B 2 -A 5 'INFO Deleted data' "$log_fn" > "${bp_stats_fn}.new"
+
+        if [[ $(grep -c '^' "${bp_stats_fn}.new") -eq 8 ]]; then
+
+            print_msg "- recording stats block"
+            /bin/mv "${bp_stats_fn}.new" "$bp_stats_fn"
+            ping_msg=$(< "$bp_stats_fn")
+        else
+            ping_msg="stats block from log not as expected: ${BORG_CONFIG_DIR}/${bp_stats_fn}.new"
+            print_msg WARNING "$ping_msg"
+        fi
     fi
 
-    # signal successful backup
+    # signal successful prune
     bgo_ping_hc success -m "$ping_msg"
 }
 
@@ -316,9 +322,9 @@ function run_compact {
 ### --- Main function ---
 for cmd in "${cmd_array[@]}"; do
     case "$cmd" in
-        test    ) run_create --dry-run ;;
         create  ) run_create ;;
-        prune   ) run_prune && run_compact ;;
+        prune   ) run_prune \
+                      && { [[ -z ${dry_run-} ]] && run_compact; } ;;
         check   ) run_check ;;
         compact ) run_compact ;;
     esac
