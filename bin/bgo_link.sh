@@ -98,8 +98,14 @@ cd "$BORG_CONFIG_DIR"
 [[ -d $borg_config_repo ]] || raise 2 "borg_config_repo not found: '$borg_config_repo'"
 
 ln -s "$borg_config_repo/borg_logging_${mach_name}_${mach_os}.conf" borg_logging.conf
-ln -s "$borg_config_repo/borg_patterns_${mach_name}_${mach_os}.txt" borg_patterns.txt
 ln -s "$borg_config_repo/borg_recursion_roots_${mach_name}_${mach_os}.txt" borg_recursion_roots.txt
 ln -s "$borg_config_repo/healthchecks_UUID_${mach_name}.txt" healthchecks_UUID.txt
+
+# patterns may only follow OS
+[[ -s "$borg_config_repo/borg_patterns_${mach_name}_${mach_os}.txt" ]]       \
+    && pat_fn="$borg_config_repo/borg_patterns_${mach_name}_${mach_os}.txt"  \
+    || pat_fn="$borg_config_repo/borg_patterns_${mach_os}.txt"
+
+ln -s "$pat_fn" borg_patterns.txt
 
 set +vx

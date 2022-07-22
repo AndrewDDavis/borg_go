@@ -80,7 +80,6 @@ printf '%s\n' "${cmd_array[@]}" | grep -qxE -e "^(create|test|prune|check)\$"  \
 [[ $(id -u) -eq 0 ]] || { raise 2 "root or sudo required."; }
 
 
-
 # Environment variables
 # - set in user ~/.bashrc or launchd plist: BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
 # - unset, when running unencrypted locally or over a LAN: BORG_PASSPHRASE
@@ -122,22 +121,49 @@ log_fn=$BORG_CONFIG_DIR/borg_log.txt
 printf '' > "$log_fn"
 
 
-function handle_borg_ec {
-    # Handle non-zero exit codes from borg
-    # - borg exits with ec=1 for warnings, which shouldn't
-    #   bring down the whole script, but should be reported
-    ec=$1
+main() {
 
-    if [[ $ec -eq 1 ]]; then
-        # relay borg warning
-        ping_msg="In ${FUNCNAME[1]}, borg exited with code 1; WARNINGs from borg_log.txt:"$'\n'
-        ping_msg+=$(grep WARNING "$log_fn")$'\n\n'
-        print_msg WARNING "$ping_msg"
-    else
-        # trigger the trap error handling
-        (exit $ec)
+    ### --- Pre-run commands ---
+    # mount repo if needed (erikson, mendeleev)
+    [[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
+        && { print_msg "Mounting backup repo"
+            bgo_check_mount; }
+
+
+    ### --- Main function ---
+    for cmd in "${cmd_array[@]}"; do
+        case "$cmd" in
+            create  ) run_create ;;
+            prune   ) run_prune \
+                        && { [[ -z ${dry_run-} ]] && run_compact; } ;;
+            check   ) run_check ;;
+            compact ) run_compact ;;
+        esac
+    done
+
+
+    ### --- Post-run commands ---
+    # unmount
+    [[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
+        && { print_msg "Unmounting backup repo"
+            bgo_check_mount -u; }
+
+    # chown log files, if running under sudo
+    # - should only be necessary for newly created files, but shouldn't hurt
+    def_luser  # luser, luser_group, luser_home from bgo_functions
+
+    if [[ $luser != $(id -un 0) ]]; then
+        for fn in "$BORG_CONFIG_DIR"/{borg_log.txt*,borg_log_chfile*.txt,borg_log_*-stats.txt,borg_go_systemd_out.log*}; do
+            # some may not exist yet after test run
+            # - this is true even with nullglob, since brace expansion is not actually
+            #   globbing
+            [[ -e $fn ]] && chown "$luser":"$luser_group" $fn
+        done
     fi
+
+    print_msg "borg_go done."
 }
+
 
 function run_create {
 
@@ -314,43 +340,23 @@ function run_compact {
                  --info --show-rc ::
 }
 
+function handle_borg_ec {
+    # Handle non-zero exit codes from borg
+    # - borg exits with ec=1 for warnings, which shouldn't
+    #   bring down the whole script, but should be reported
+    ec=$1
 
-### --- Pre-run commands ---
-# mount repo if needed (erikson, mendeleev)
-[[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
-    && { print_msg "Mounting backup repo"
-         bgo_check_mount; }
-
-
-### --- Main function ---
-for cmd in "${cmd_array[@]}"; do
-    case "$cmd" in
-        create  ) run_create ;;
-        prune   ) run_prune \
-                      && { [[ -z ${dry_run-} ]] && run_compact; } ;;
-        check   ) run_check ;;
-        compact ) run_compact ;;
-    esac
-done
+    if [[ $ec -eq 1 ]]; then
+        # relay borg warning
+        ping_msg="In ${FUNCNAME[1]}, borg exited with code 1; WARNINGs from borg_log.txt:"$'\n'
+        ping_msg+=$(grep WARNING "$log_fn")$'\n\n'
+        print_msg WARNING "$ping_msg"
+    else
+        # trigger the trap error handling
+        (exit $ec)
+    fi
+}
 
 
-### --- Post-run commands ---
-# unmount
-[[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
-    && { print_msg "Unmounting backup repo"
-         bgo_check_mount -u; }
-
-# chown log files, if running under sudo
-# - should only be necessary for newly created files, but shouldn't hurt
-def_luser  # luser, luser_group, luser_home from bgo_functions
-
-if [[ $luser != $(id -un 0) ]]; then
-    for fn in "$BORG_CONFIG_DIR"/{borg_log.txt*,borg_log_chfile*.txt,borg_log_*-stats.txt,borg_go_systemd_out.log*}; do
-        # some may not exist yet after test run
-        # - this is true even with nullglob, since brace expansion is not actually
-        #   globbing
-        [[ -e $fn ]] && chown "$luser":"$luser_group" $fn
-    done
-fi
-
-print_msg "borg_go done."
+# Now that functions are defined, run main()
+main
