@@ -43,9 +43,9 @@ sed -En 's/^.*INFO E (.*)/\1/ p' "$borg_logfile" >"$errf_fn.new"
 
 if ! grep -qc '^' "$errf_fn.new"; then
     # no errors, as expected
-    /bin/rm "$errf_fn.new"
+    /bin/rm -f "$errf_fn.new"
 else
-    /bin/mv "$errf_fn.new" "$errf_fn"
+    /bin/mv -f "$errf_fn.new" "$errf_fn"
     print_msg WARNING "Error files found, see $errf_fn:"
     head "$errf_fn"
 fi
@@ -54,10 +54,10 @@ fi
 sed -En 's/^.*INFO [AMC] (.*)/\1/ p' "$borg_logfile" >"$chf_fn.new"
 
 n_files=$(grep -c '^' "$chf_fn.new")  \
-    || { /bin/rm "$chf_fn.new"
+    || { /bin/rm -f "$chf_fn.new"
          raise w "no filenames found in log"; }
 
-/bin/mv "$chf_fn.new" "$chf_fn"
+/bin/mv -f "$chf_fn.new" "$chf_fn"
 
 
 # compute file sizes for changed files
@@ -81,8 +81,11 @@ done <"$chf_fn"
 n_sizes=$(grep -c '^' "$du_fn.new")  \
     || raise 2 "no sizes found by du: '$PWD/$du_fn.new'"
 
-/bin/mv "$du_fn.new" "$du_fn"
-/bin/mv "$du_fails.new" "$du_fails"
+/bin/mv -f "$du_fn.new" "$du_fn"
+[[ -s "$du_fails.new" ]]                       \
+    && /bin/mv -f "$du_fails.new" "$du_fails"  \
+    || /bin/rm -f "$du_fails.new" "$du_fails"  # rm if empty
+
 print_msg "Files and sizes output to $PWD/$du_fn"
 print_msg "Found $n_files filenames, reported sizes on $n_sizes"
 
@@ -92,9 +95,6 @@ print_msg "Found $n_files filenames, reported sizes on $n_sizes"
 print_msg "Largest 12:"
 sort -rh "$du_fn" | head -n 12 | sed 's/^/    /' || handle_pipefails $?
 
-# clean up
-# [[ $1 == --noclean ]] || /bin/rm $chf_fn $du_fn
-
-# chown instead
+# chown log files
 chown "$lognm":"$lognm_group" "$chf_fn" "$du_fn"
 # chmod 0640 "$chf_fn" "$du_fn"

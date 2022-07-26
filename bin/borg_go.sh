@@ -222,7 +222,7 @@ function run_create {
         if [[ $(grep -c '^' "$bc_stats_fn.new") -eq 17 ]]; then
 
             print_msg "- recording stats block"
-            /bin/mv "$bc_stats_fn.new" "$bc_stats_fn"
+            /bin/mv -f "$bc_stats_fn.new" "$bc_stats_fn"
             ping_msg+="borg-create stats:"$'\n'
             ping_msg+=$(< "$bc_stats_fn")
         else
@@ -311,7 +311,7 @@ function run_prune {
         if [[ $(grep -c '^' "$bp_stats_fn.new") -eq 8 ]]; then
 
             print_msg "- recording stats block"
-            /bin/mv "$bp_stats_fn.new" "$bp_stats_fn"
+            /bin/mv -f "$bp_stats_fn.new" "$bp_stats_fn"
             ping_msg="borg-prune stats:"$'\n'
             ping_msg+=$(< "$bp_stats_fn")
         else
