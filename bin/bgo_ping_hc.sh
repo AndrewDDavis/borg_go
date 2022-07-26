@@ -32,11 +32,12 @@ EOF
 }
 
 # Configure some common variables, shell options, and functions
+set -eE
 BS0="${BASH_SOURCE[0]}"
 exc_fn=$(basename -- "$BS0")
 exc_dir=$(dirname -- "$BS0")
 
-src_dir=$(python -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
+src_dir=$(python3 -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
 source "$src_dir/bgo_functions.sh"
 
 

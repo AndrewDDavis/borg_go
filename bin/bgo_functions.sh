@@ -13,7 +13,7 @@
 # exc_fn=$(basename -- "$BS0")
 # exc_dir=$(dirname -- "$BS0")
 #
-# src_dir=$(python -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
+# src_dir=$(python3 -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
 # source "$src_dir/bgo_functions.sh"
 
 
@@ -69,21 +69,31 @@ def_mach_id() {
     mach_os=$(uname -s)
     mach_os=${mach_os,,}
     [[ $mach_os == "darwin" ]] && mach_os=macos
+    return 0
 }
 
-
-def_luser() {
+def_lognm() {
     # These scripts are likely run using `sudo -EH` during a borg backup, meaning HOME
     # will be root's home. We can define the login name of user running sudo using
     # logname (checks owner of the tty)
-    luser=$(logname 2>/dev/null) || true
+    lognm=$(logname 2>/dev/null) || true
 
-    # When running with systemd or launchd, Linux produces an error code, and macOS
-    # produces /var/empty for the home dir. In those cases, grab the username from
-    # BORG_CONFIG_DIR:
-    [[ -z $luser || ~$luser == /var/empty ]] \
-        && luser=$(sed -E 's|/[^/]*/([^/]*)/.*|\1|' <<<"$BORG_CONFIG_DIR")
+    # Handle case of running without sudo: when running with Systemd, Linux produces an
+    # error code and an empty string; when running with Launchd, macOS produces
+    # /var/empty for the home dir. In those cases, try to parse BORG_CONFIG_DIR for a
+    # username:
+    [[ -z $lognm || ~$lognm == /var/empty ]] \
+        && lognm=$(sed -E 's|/[^/]+/([^/]+)/.*|\1|' <<<"$BORG_CONFIG_DIR")
 
-    luser_group=$(id -gn $luser)
-    luser_home=$(eval echo ~$luser)  # NB variable replacement done _before_ execution
+    lognm_group=$(id -gn "$lognm")
+    lognm_home=$(eval echo ~"$lognm")  # NB variable replacement done _before_ execution
+
+    [[ $lognm_home != "~$lognm" ]] || raise 2 "failed to get lognm: '$lognm'"
+}
+
+handle_pipefails() {
+    # ignore exit code 141 from simple command pipes
+    # - use with: cmd1 | cmd2 || handle_pipefails $?
+    (( $1 == 141 )) && return 0
+    return $1
 }

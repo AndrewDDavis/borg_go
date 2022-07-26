@@ -10,20 +10,21 @@
 # v0.1 (Jun 2022) by Andrew Davis (addavis@gmail.com)
 
 # Configure some common variables, shell options, and functions
+set -eE
 BS0="${BASH_SOURCE[0]}"
 exc_fn=$(basename -- "$BS0")
 exc_dir=$(dirname -- "$BS0")
 
-src_dir=$(python -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
+src_dir=$(python3 -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
 source "$src_dir/bgo_functions.sh"
 
 # requires root to reliably stat all files
 [[ $(id -u) -eq 0 ]] || raise 2 "root or sudo required."
 
 # find config dir based on logged-in user name (when running with sudo)
-def_luser  # luser, luser_group, luser_home from bgo_functions
+def_lognm  # from bgo_functions: defines lognm, lognm_group, lognm_home
 
-[[ -z ${BORG_CONFIG_DIR-} ]] && BORG_CONFIG_DIR="$luser_home/.config/borg"
+[[ -z ${BORG_CONFIG_DIR-} ]] && BORG_CONFIG_DIR="$lognm_home/.config/borg"
 
 cd "$BORG_CONFIG_DIR" \
     || raise 2 "could not cd to config dir: '$BORG_CONFIG_DIR'"
@@ -87,13 +88,13 @@ print_msg "Found $n_files filenames, reported sizes on $n_sizes"
 
 # output files sorted by size
 # -h handles human-readable chars for K, M, G, etc
-# sed prepends spaces to each line
+# sed prepends spaces to each line; head sends sigpipe to sort (causes pipefail)
 print_msg "Largest 12:"
-sort -rh "$du_fn" | head -n 12 | sed 's/^/    /'
+sort -rh "$du_fn" | head -n 12 | sed 's/^/    /' || handle_pipefails $?
 
 # clean up
 # [[ $1 == --noclean ]] || /bin/rm $chf_fn $du_fn
 
 # chown instead
-chown "$luser":"$luser_group" "$chf_fn" "$du_fn"
+chown "$lognm":"$lognm_group" "$chf_fn" "$du_fn"
 # chmod 0640 "$chf_fn" "$du_fn"

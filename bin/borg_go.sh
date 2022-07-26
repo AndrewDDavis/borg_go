@@ -40,11 +40,12 @@ EOF
 # - BASH_SOURCE (and 0) likely refer to symlink
 # - exc_fn and exc_dir refer to the executable path as called, while
 #   src_dir refers to the resolved absolute canonical path to the script dir
+set -eE
 BS0=${BASH_SOURCE[0]}
 exc_fn=$(basename -- "$BS0")
 exc_dir=$(dirname -- "$BS0")
 
-src_dir=$(python -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
+src_dir=$(python3 -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
 source "$src_dir/bgo_functions.sh"
 
 
@@ -115,9 +116,10 @@ src_msg() { printf '%s\n' "$1 not found"$'\n'"you may need to run $src_dir/bgo_l
 
 
 # Wipe out the log, then borg_logging.conf should append for this session
-# - try to preserve ownership and file mode
+# - use cp to preserve ownership and file mode
 log_fn=$BORG_CONFIG_DIR/borg_log.txt
-/bin/cp -pf "$log_fn" "$log_fn.1" && gzip -f "$log_fn.1"
+[[ -s $log_fn ]] \
+    && /bin/cp -pf "$log_fn" "$log_fn.1" && gzip -f "$log_fn.1"
 printf '' > "$log_fn"
 
 
@@ -134,7 +136,7 @@ main() {
     for cmd in "${cmd_array[@]}"; do
         case "$cmd" in
             create  ) run_create ;;
-            prune   ) run_prune \
+            prune   ) run_prune  \
                         && { [[ -z ${dry_run-} ]] && run_compact; } ;;
             check   ) run_check ;;
             compact ) run_compact ;;
@@ -146,20 +148,25 @@ main() {
     # unmount
     [[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
         && { print_msg "Unmounting backup repo"
-            bgo_check_mount -u; }
+             bgo_check_mount -u; }
 
-    # chown log files, if running under sudo
-    # - should only be necessary for newly created files, but shouldn't hurt
-    def_luser  # luser, luser_group, luser_home from bgo_functions
+    # chown log files owned by root to user login name, if running under sudo
+    # - should only be necessary for newly created files
+    def_lognm    # from bgo_functions: sets lognm, lognm_group, lognm_home
 
-    if [[ $luser != $(id -un 0) ]]; then
-        for fn in "$BORG_CONFIG_DIR"/{borg_log.txt*,borg_log_chfile*.txt,borg_log_*-stats.txt,borg_go_systemd_out.log*}; do
-            # some may not exist yet after test run
-            # - this is true even with nullglob, since brace expansion is not actually
-            #   globbing
-            [[ -e $fn ]] && chown "$luser":"$luser_group" $fn
-        done
-    fi
+    find "$BORG_CONFIG_DIR" \( -name 'borg_log.txt*'                   \
+                            -o -name 'borg_log_chfile*.txt'            \
+                            -o -name 'borg_log_*-stats.txt'            \
+                            -o -name 'borg_go_[ls]*d_out.txt*' \)      \
+                            -user "$(id -un 0)"                        \
+                            -exec chown "$lognm":"$lognm_group" '{}' \;
+
+    # for fn in "$BORG_CONFIG_DIR"/borg_log{.txt*,_chfile*.txt,_*-stats.txt}  \
+    #           "$BORG_CONFIG_DIR"/borg_go_{systemd,launchd}_out.txt*; do
+    #     # some may not exist on test run, or some systems (Launchd vs Systemd)
+    #     # - this is true even with nullglob, since brace expansion is not globbing
+    #     [[ -f $fn ]] && chown "$lognm":"$lognm_group" "$fn"
+    # done
 
     print_msg "borg_go done."
 }
@@ -349,7 +356,7 @@ function handle_borg_ec {
     if [[ $ec -eq 1 ]]; then
         # relay borg warning
         ping_msg="In ${FUNCNAME[1]}, borg exited with code 1; WARNINGs from borg_log.txt:"$'\n'
-        ping_msg+=$(grep WARNING "$log_fn")$'\n\n'
+        ping_msg+=$(grep WARNING "$log_fn")$'\n'
         print_msg WARNING "$ping_msg"
     else
         # trigger the trap error handling
