@@ -27,12 +27,8 @@ function print_usage { cat << EOF
                       by the dry-run option, but compact will not run automatically
                       after prune on a dry-run.
 
-  Configuration:
-    - set env vars BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
-    - also set BORG_MNT_REQD=1 if necessary
-    - to allow notifications and tracking using healthchecks.io, create the file
-      healthchecks_UUID.txt in your BORG_CONFIG_DIR, which should contain the UUID
-      of your healthchecks project (see https://healthchecks.io/)
+  For config and setup, see readme.
+
 EOF
 }
 
@@ -70,14 +66,23 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# Check args and root
-printf '%s\n' "${cmd_array[@]}" | grep -qxE -e "^(create|test|prune|check)\$"  \
-    || raise w print_msg "No actions to perform, stay frosty"
+# Check for valid command(s)
+if ! printf '%s\n' "${cmd_array[@]}" \
+     | grep -qxE -e "^(create|test|prune|check)\$"
+then
+    raise w print_msg "No actions to perform, stay frosty"
+fi
 
-# borg create requires root to read all files
+# Check for root
+# - borg create requires root to read all files
 # - generally a good idea to run as root when making changes to the repo otherwise
 #   (i.e. anything beyond borg list or borg info), to prevent permissions issues in
 #   the security and cache dirs.
+# - in the docs, it is strongly recommended to always access the repository using
+#   the same user account, to avoid permissions issues in your borg repository or
+#   borg cache. For remote repos, it's straightforward to always use `ssh user@host`.
+#   For local repositories, using `user@localhost:/path/to/repo` for BORG_REPO
+#   ensures the same user always accesses the repo.
 [[ $(id -u) -eq 0 ]] || { raise 2 "root or sudo required."; }
 
 

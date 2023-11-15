@@ -1,12 +1,14 @@
-# Scripts for use with BorgBackup
+# Borg-go : Scripts for use with BorgBackup
 
-scripts to automate and support running backups using [BorgBackup](https://www.borgbackup.org/).
+Scripts to automate and support running backups using [BorgBackup](https://www.borgbackup.org/).
 
 ## Installation
 
-I symlink these from `~/.local/bin`, omitting the `.sh` suffix. Make sure it is in your PATH. choose the appropriate pre-backup script to symlink based on your OS.
-The **borg_go_links.sh** script is useful for creating the links.
+I symlink these scripts from `~/.local/bin`, omitting the `.sh` suffix.
+- Make sure the directory is in your PATH.
+- Choose the appropriate pre-backup script to symlink based on your OS.
 
+The **borg_go_links.sh** script is useful for creating the links.
 
 ### Installed Scripts
 
@@ -17,10 +19,23 @@ The following commands become available after installation:
 - **borg_pre-backup**  Runs commands to prepare for the backup, such as generating a list of the installed applications or packages in the ~/.backup directory.
 - **hc_ping**  Sends start and success or failure signals to healthchecks, to facilitate monitoring of backup job success and notify if backups are failing or out of date.
 
+### Configuration
+
+- set env vars BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
+- also set BORG_MNT_REQD=1 if necessary
+- to allow notifications and tracking using healthchecks.io, create the file
+  healthchecks_UUID.txt in your BORG_CONFIG_DIR, which should contain the UUID
+  of your healthchecks project (see https://healthchecks.io/) 
+
 ## Usage
 
-1. edit `borg_go` to your heart's content
-2. run using `sudo -EH borg_go create prune check`. compact is also supported, order of the commands is preserved.
+A typical run uses the command `sudo -EH borg_go create prune check`. The `compact` command is also supported, and the order of the commands is preserved.
+
+Depending on the `/etc/sudoers` configuration, which can contain the `secure_path` parameter, the above command may fail because `borg_go` is not in the `sudo` PATH. There are several ways to work around this issue:
+
+- Edit the `/etc/sudoers` config to comment the line, add the relevant path, or remove the borg user from the requirement, e.g. by adding the `exempt_group` or using something like `Defaults:!borg_user secure_path="..."`.
+- Use which or command: `sudo -EH $(command -v borg_go) ...`. This can be aliased, e.g. as `bgo`.
+- Use env: `sudo -EH env PATH=$PATH borg_go ...`. This can be aliased, e.g. as `sudop`.
 
 ## After
 

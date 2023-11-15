@@ -86,11 +86,11 @@ $maybe /bin/mkdir -p "$local_bin_dir"
 cd "$local_bin_dir"
 [[ -d $borg_scripts_repo ]] || raise 2 "borg_scripts_repo not found: '$borg_scripts_repo'"
 
-$maybe ln -s "$borg_scripts_repo/borg_go.sh" borg_go
-$maybe ln -s "$borg_scripts_repo/bgo_check_mount.sh" bgo_check_mount
-$maybe ln -s "$borg_scripts_repo/bgo_chfile_sizes.sh" bgo_chfile_sizes
-$maybe ln -s "$borg_scripts_repo/bgo_prep_backup.sh" bgo_prep_backup
-$maybe ln -s "$borg_scripts_repo/bgo_ping_hc.sh" bgo_ping_hc
+$maybe ln -sf "$borg_scripts_repo/borg_go.sh" borg_go
+$maybe ln -sf "$borg_scripts_repo/bgo_check_mount.sh" bgo_check_mount
+$maybe ln -sf "$borg_scripts_repo/bgo_chfile_sizes.sh" bgo_chfile_sizes
+$maybe ln -sf "$borg_scripts_repo/bgo_prep_backup.sh" bgo_prep_backup
+$maybe ln -sf "$borg_scripts_repo/bgo_ping_hc.sh" bgo_ping_hc
 
 # check to make sure scripts are on PATH
 $maybe [[ -n $(command -v borg_go) ]] || raise 2 "borg_go not on path"
@@ -102,15 +102,15 @@ $maybe /bin/mkdir -p "$BORG_CONFIG_DIR"
 cd "$BORG_CONFIG_DIR"
 [[ -d $borg_config_repo ]] || raise 2 "borg_config_repo not found: '$borg_config_repo'"
 
-$maybe ln -s "$borg_config_repo/borg_logging_${mach_name}_${mach_os}.conf" borg_logging.conf
-$maybe ln -s "$borg_config_repo/borg_recursion_roots_${mach_name}_${mach_os}.txt" borg_recursion_roots.txt
-$maybe ln -s "$borg_config_repo/healthchecks_UUID_${mach_name}.txt" healthchecks_UUID.txt
+$maybe ln -sf "$borg_config_repo/borg_logging_${mach_name}_${mach_os}.conf" borg_logging.conf
+$maybe ln -sf "$borg_config_repo/borg_recursion_roots_${mach_name}_${mach_os}.txt" borg_recursion_roots.txt
+$maybe ln -sf "$borg_config_repo/healthchecks_UUID_${mach_name}.txt" healthchecks_UUID.txt
 
 # patterns may only follow OS
 [[ -s "$borg_config_repo/borg_patterns_${mach_name}_${mach_os}.txt" ]]       \
     && pat_fn="$borg_config_repo/borg_patterns_${mach_name}_${mach_os}.txt"  \
     || pat_fn="$borg_config_repo/borg_patterns_${mach_os}.txt"
 
-$maybe ln -s "$pat_fn" borg_patterns.txt
+$maybe ln -sf "$pat_fn" borg_patterns.txt
 
 $maybe set +vx
