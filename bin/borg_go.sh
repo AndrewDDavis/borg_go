@@ -273,13 +273,15 @@ function run_prune {
 
     # borg command
     print_msg "- calling borg prune ${dry_run-$'\b'}"
-    # - The '{hostname}-' prefix limits prune's operation to this machine's archives
-    # - N.B. the keep rules don't operate exactly as you may expect, because they don't
-    # count intervals in which there are no backups. E.g., if you only did 7 backups in
-    # the last year, and they were all on different days, then --keep-daily 7 would keep
-    # all those backups for the last year, not just the ones in the past week. Or, e.g.
-    # if you only backup daily, and use --keep-hourly 24, the last 24 days of backups
-    # will be kept. The keep-within rules are more like this, but not exactly...
+    # - The '{hostname}-' prefix limits the prune operation to the archives associated
+    #   with the present machine.
+    # - N.B. the keep rules do not operate exactly as you may expect, because intervals
+    #   in which there are no backups are not counted. E.g., if you only did 7 backups
+    #   in the last year, and they were all on different days, then --keep-daily 7 would
+    #   keep all those backups for the last year, not just the ones in the past week.
+    #   Or, e.g. if you only backup daily, and use --keep-hourly 24, the last 24 days of
+    #   backups will be kept. The keep-within rules are more like this, but not
+    #   exactly...
     # - From the docs:
     #     + The --keep-within option takes an argument of the form “<int><char>”, where
     #       char is “H”, “d”, “w”, “m”, “y”. For example, --keep-within 2d means to keep
@@ -292,16 +294,16 @@ function run_prune {
     # - Weeks go from Monday to Sunday, so weekly backups may keep e.g. a Tuesday and a
     #   Sunday archive if that's all it has to choose from.
     # - See the docs for examples, but the finer details probably don't matter to us:
-    # https://borgbackup.readthedocs.io/en/stable/usage/prune.html
+    #   https://borgbackup.readthedocs.io/en/stable/usage/prune.html
     # - The following options should keep every archive within the last 14 days, and
     #   weekly archives for 2 weeks that have a backup before that, then similarly for 6
     #   monthly archives, and 3 yearly archives.
 
-    borg prune ${dry_run-} --list --stats --prefix '{hostname}-' \
-               --keep-within 14d                                 \
-               --keep-weekly 2                                   \
-               --keep-monthly 6                                  \
-               --keep-yearly 3                                   \
+    borg prune ${dry_run-} --list --stats -a '{hostname}-*' \
+               --keep-within 14d                            \
+               --keep-weekly 2                              \
+               --keep-monthly 6                             \
+               --keep-yearly 3                              \
                --info --show-rc ::
 
     if [[ -n ${dry_run-} ]]; then
@@ -336,9 +338,9 @@ function run_check {
     # Examine backup repo and most recent archive to ensure validity
     print_msg "Starting check ..."
 
-    borg check --last 1 --prefix '{hostname}-' \
+    borg check --last 1 -a '{hostname}-*' \
                --info --show-rc ::
-    # borg check --last 1 --prefix '{hostname}-' --info --show-rc --progress ::
+    # --progress ?
 }
 
 function run_compact {
