@@ -1,4 +1,4 @@
-# Library of functions to support the borg_go project
+# Library of functions to support the borg-go project
 # See: https://github.com/AndrewDDavis/borg_go
 #
 # v0.1 (Jul 2022) by Andrew Davis (addavis@gmail.com)
@@ -56,7 +56,7 @@ raise() {
 trap -- 'raise 2 "${exc_fn--} was interrupted${FUNCNAME:+ (function $FUNCNAME)}"' INT TERM
 trap -- 'ec=$?
 ping_msg="Exception $ec in $0 at line $LINENO${FUNCNAME:+ (function stack: ${FUNCNAME[@]})}"
-[[ $0 == borg_go?(.sh) ]] && bgo_ping_hc failure -m "$ping_msg"
+[[ $0 == borg-go?(.sh) ]] && bgo_ping_hc failure -m "$ping_msg"
 raise $ec "$ping_msg"' ERR
 
 
@@ -69,11 +69,12 @@ def_mach_id() {
     mach_os=$(uname -s)
     mach_os=${mach_os,,}
     [[ $mach_os == "darwin" ]] && mach_os=macos
+
     return 0
 }
 
 def_lognm() {
-    # These scripts are likely run using `sudo -EH` during a borg backup, meaning HOME
+    # These scripts are likely run using `sudo` during a borg backup, meaning HOME
     # will be root's home. We can define the login name of user running sudo using
     # logname (checks owner of the tty)
     lognm=$(logname 2>/dev/null) || true

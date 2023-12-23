@@ -13,7 +13,7 @@ function print_usage { cat << EOF
 
   This script sends a signal to the relevant healthchecks.io URL to indicate
   progress or errors during a back-up with BorgBackup. It is normally called
-  from borg_go.
+  from borg-go.
 
   Usage: bgo_ping_hc <command> [optional messages]
 
@@ -107,11 +107,11 @@ function send_ping {
     [[ -n ${1:-} ]] && full_url+="/$1"
 
     # check for `borg create/prune --stats` output if requested
-    if [[ ${stats:-} == cstats && -r "${BORG_CONFIG_DIR}/borg_log_create-stats.txt" ]]; then
-        local stats_fn="${BORG_CONFIG_DIR}/borg_log_create-stats.txt"
+    if [[ ${stats:-} == cstats && -r "${BORG_CONFIG_DIR}/log/borg_log_create-stats.txt" ]]; then
+        local stats_fn="${BORG_CONFIG_DIR}/log/borg_log_create-stats.txt"
 
-    elif [[ ${stats:-} == pstats && -r "${BORG_CONFIG_DIR}/borg_log_prune-stats.txt" ]]; then
-        local stats_fn="${BORG_CONFIG_DIR}/borg_log_prune-stats.txt"
+    elif [[ ${stats:-} == pstats && -r "${BORG_CONFIG_DIR}/log/borg_log_prune-stats.txt" ]]; then
+        local stats_fn="${BORG_CONFIG_DIR}/log/borg_log_prune-stats.txt"
     fi
 
     # curl command

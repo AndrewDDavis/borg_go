@@ -29,35 +29,37 @@ def_lognm  # from bgo_functions: defines lognm, lognm_group, lognm_home
 cd "$BORG_CONFIG_DIR" \
     || raise 2 "could not cd to config dir: '$BORG_CONFIG_DIR'"
 
-borg_logfile=borg_log.txt
-chf_fn=borg_log_chfiles.txt
-errf_fn=borg_errfiles.txt
-du_fn=borg_log_chfile_sizes.txt
+borg_logfile=log/borg_log.txt
+chf_fn=log/borg_log_chfiles.txt
+errf_fn=log/borg_errfiles.txt
+du_fn=log/borg_log_chfile_sizes.txt
 du_fails=${du_fn/sizes/fails}
 
 [[ -r $borg_logfile ]] \
     || raise 2 "could not read logfile: '$borg_logfile'"
 
 # check for any error files
-sed -En 's/^.*INFO E (.*)/\1/ p' "$borg_logfile" >"$errf_fn.new"
+sed -En 's/^.*INFO E (.*)/\1/ p' "$borg_logfile" > "${errf_fn}.new"
 
-if ! grep -qc '^' "$errf_fn.new"; then
+if ! grep -qc '^' "${errf_fn}.new"
+then
     # no errors, as expected
-    /bin/rm -f "$errf_fn.new"
+    /bin/rm -f "${errf_fn}.new"
 else
-    /bin/mv -f "$errf_fn.new" "$errf_fn"
+    /bin/mv -f "${errf_fn}.new" "$errf_fn"
+    chown "$lognm":"$lognm_group" "$errf_fn"
     print_msg WARNING "Error files found, see $errf_fn:"
     head "$errf_fn"
 fi
 
 # parse log file to extract only file paths of changed files
-sed -En 's/^.*INFO [AMC] (.*)/\1/ p' "$borg_logfile" >"$chf_fn.new"
+sed -En 's/^.*INFO [AMC] (.*)/\1/ p' "$borg_logfile" > "${chf_fn}.new"
 
-n_files=$(grep -c '^' "$chf_fn.new")  \
-    || { /bin/rm -f "$chf_fn.new"
+n_files=$(grep -c '^' "${chf_fn}.new")  \
+    || { /bin/rm -f "${chf_fn}.new"
          raise w "no filenames found in log"; }
 
-/bin/mv -f "$chf_fn.new" "$chf_fn"
+/bin/mv -f "${chf_fn}.new" "$chf_fn"
 
 
 # compute file sizes for changed files
@@ -70,21 +72,21 @@ n_files=$(grep -c '^' "$chf_fn.new")  \
 #     + also, du doesn't read from stdin under BSD, so getting the total (-c) is tricky
 #     + could also have used xargs -0:
 #       <"$chf_fn" tr '\n' '\0' | xargs -0 -I '{}' sh -c \
-#                                 "du -hs -- '{}' || true" >"$du_fn.new" 2>"$du_fails.new"
->"$du_fn.new"
->"$du_fails.new"
+#                                 "du -hs -- '{}' || true" >"${du_fn}.new" 2>"${du_fails}.new"
+>"${du_fn}.new"
+>"${du_fails}.new"
 while IFS='' read -r fn; do
-    du -hs -- "$fn" >>"$du_fn.new" 2>>"$du_fails.new" || true
+    du -hs -- "$fn" >>"${du_fn}.new" 2>>"${du_fails}.new" || true
 done <"$chf_fn"
 
 # ensure du output was as expected
-n_sizes=$(grep -c '^' "$du_fn.new")  \
-    || raise 2 "no sizes found by du: '$PWD/$du_fn.new'"
+n_sizes=$(grep -c '^' "${du_fn}.new")  \
+    || raise 2 "no sizes found by du: '$PWD/${du_fn}.new'"
 
-/bin/mv -f "$du_fn.new" "$du_fn"
-[[ -s "$du_fails.new" ]]                       \
-    && /bin/mv -f "$du_fails.new" "$du_fails"  \
-    || /bin/rm -f "$du_fails.new" "$du_fails"  # rm if empty
+/bin/mv -f "${du_fn}.new" "$du_fn"
+[[ -s "${du_fails}.new" ]]                       \
+    && /bin/mv -f "${du_fails}.new" "$du_fails"  \
+    || /bin/rm -f "${du_fails}.new" "$du_fails"  # rm if empty
 
 print_msg "Files and sizes output to $PWD/$du_fn"
 print_msg "Found $n_files filenames, reported sizes on $n_sizes"

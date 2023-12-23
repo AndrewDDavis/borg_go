@@ -3,7 +3,7 @@
 # This script is used for working with borg repos stored on the hippocampus
 # NAS (for mendeleev and erikson).
 # It checks that the SSHFS volume is mounted, and mounts it if not.
-# Run as root for mount/umount (?), with `sudo -EH`
+# Run as root for mount/umount (?), with `sudo`
 # On macOS, need to install BorgBackup through the tap method with homebrew
 # to allow fuse mounting to work.
 
@@ -48,7 +48,7 @@ elif [[ ! -e ${mnt_pnt}/README ]]; then
     # mount ssh volume from hippocampus
     # - to avoid sshfs asking for password, use:
     #   ssh-copy-id root@hc
-    #   sudo -EH ssh-copy-id root@hc
+    #   sudo ssh-copy-id root@hc
     [[ -t 0 && -n $TERM ]] \
         && echo "borg_mount-check: sshfs may ask for remote password for $nas_url..."
 
@@ -59,7 +59,7 @@ elif [[ ! -e ${mnt_pnt}/README ]]; then
 
     if [[ ${sshfs_ec-} -eq 1 ]]; then
         echo "ERROR: sshfs exited with code $ec"
-        echo "       possibly requires \`sudo -EH ssh-copy-id $nas_url\`"
+        echo "       possibly requires \`sudo ssh-copy-id $nas_url\`"
         exit 1
     elif [[ ${sshfs_ec-} -gt 1 ]]; then
         echo "sshfs exited with code $ec, unknown error"
