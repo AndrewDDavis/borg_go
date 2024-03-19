@@ -59,6 +59,18 @@ ping_msg="Exception $ec in $0 at line $LINENO${FUNCNAME:+ (function stack: ${FUN
 [[ $0 == borg-go?(.sh) ]] && bgo_ping_hc failure -m "$ping_msg"
 raise $ec "$ping_msg"' ERR
 
+handle_pipefails() {
+    # Ignore exit code 141 (pipefail, or sigpipe received) from simple command pipes.
+    # - This occurs when a program (e.g. `head -1`) stops reading from a pipe.
+    # - See [my answer][1] for details.
+    #   [1]: https://unix.stackexchange.com/a/709880/85414
+    # Usage:
+    #   cmd1 | cmd2 || handle_pipefails $?
+    # E.g. to test:
+    #   yes | head -n 1 || handle_pipefails $?
+    # Returns 0 for $1=141, or returns the value of $1 otherwise.
+    (( $1 == 141 )) || return $1
+}
 
 def_mach_id() {
     # Set variables for machine name and OS
@@ -90,11 +102,4 @@ def_lognm() {
     lognm_home=$(eval echo ~"$lognm")  # NB variable replacement done _before_ execution
 
     [[ $lognm_home != "~$lognm" ]] || raise 2 "failed to get lognm: '$lognm'"
-}
-
-handle_pipefails() {
-    # ignore exit code 141 from simple command pipes
-    # - use with: cmd1 | cmd2 || handle_pipefails $?
-    (( $1 == 141 )) && return 0
-    return $1
 }

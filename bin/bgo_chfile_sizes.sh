@@ -70,23 +70,47 @@ n_files=$(grep -c '^' "${chf_fn}.new")  \
 #     + would like to do `du -hsc $(< $chf_fn)` but produces argument list too long for
 #       a large number of files
 #     + also, du doesn't read from stdin under BSD, so getting the total (-c) is tricky
-#     + could also have used xargs -0:
-#       <"$chf_fn" tr '\n' '\0' | xargs -0 -I '{}' sh -c \
-#                                 "du -hs -- '{}' || true" >"${du_fn}.new" 2>"${du_fails}.new"
 >"${du_fn}.new"
 >"${du_fails}.new"
-while IFS='' read -r fn; do
-    du -hs -- "$fn" >>"${du_fn}.new" 2>>"${du_fails}.new" || true
-done <"$chf_fn"
+
+# while IFS='' read -r fn
+# do
+#     du -hs -- "$fn" >>"${du_fn}.new" 2>>"${du_fails}.new" || {
+#         true
+#     }
+# done <"$chf_fn"
+
+# When there are many new files, the above loop really drags: takes minutes when it
+# should take seconds.
+# - use xargs -0 instead, wrapping the du call in a function to handle the || and still
+#   allow multiple arguments from xargs
+# - need to export variables to be available to the bash command call
+du_call() {
+    /usr/bin/du -hs -- "$@" >>"${du_fn}.new" 2>>"${du_fails}.new" || {
+        true
+    }
+}
+
+export -f du_call
+export du_fn du_fails
+
+<"$chf_fn" tr '\n' '\0' |  \
+    xargs -0 bash -c 'du_call "$@"' _
+
 
 # ensure du output was as expected
-n_sizes=$(grep -c '^' "${du_fn}.new")  \
-    || raise 2 "no sizes found by du: '$PWD/${du_fn}.new'"
+n_sizes=$(grep -c '^' "${du_fn}.new") || {
+    raise 2 "no sizes found by du: '$PWD/${du_fn}.new'"
+}
 
 /bin/mv -f "${du_fn}.new" "$du_fn"
-[[ -s "${du_fails}.new" ]]                       \
-    && /bin/mv -f "${du_fails}.new" "$du_fails"  \
-    || /bin/rm -f "${du_fails}.new" "$du_fails"  # rm if empty
+
+if [[ -s "${du_fails}.new" ]]
+then
+    /bin/mv -f "${du_fails}.new" "$du_fails"
+else
+    /bin/rm -f "${du_fails}.new" "$du_fails"  # rm if empty
+fi
 
 print_msg "Files and sizes output to $PWD/$du_fn"
 print_msg "Found $n_files filenames, reported sizes on $n_sizes"

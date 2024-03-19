@@ -9,6 +9,14 @@
 # by Andrew Davis (addavis@gmail.com)
 # v0.2 (Dec 2023)
 
+# TODO:
+# - du can take a long time when running with ionice; consider running the
+#   chfile_sizes script in non-blocking mode
+# - write a logs command for borg-go
+# - record total execution time
+# - code a borg recover tool, to pull all versions of a file into a temp directory, and diff them
+# - preserve file modified time when rotating logs
+
 function print_usage {
 cat << EOF
 
@@ -238,7 +246,7 @@ function run_create {
 
     else
         # record file sizes for backed-up files
-        print_msg "- recording file sizes of changed files"
+        print_msg "- recording sizes of changed files"
         "${src_dir}"/bgo_chfile_sizes.sh
 
         # set aside stats block from log to prevent overwriting
