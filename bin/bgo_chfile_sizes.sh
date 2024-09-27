@@ -55,9 +55,14 @@ fi
 # parse log file to extract only file paths of changed files
 sed -En 's/^.*INFO [AMC] (.*)/\1/ p' "$borg_logfile" > "${chf_fn}.new"
 
-n_files=$(grep -c '^' "${chf_fn}.new")  \
-    || { /bin/rm -f "${chf_fn}.new"
-         raise w "no filenames found in log"; }
+# chown log file
+chown "$lognm":"$lognm_group" "${chf_fn}.new"
+
+if ! n_files=$(grep -c '^' "${chf_fn}.new")
+then
+    /bin/rm -f "${chf_fn}.new"
+    raise w "no filenames found in log"
+fi
 
 /bin/mv -f "${chf_fn}.new" "$chf_fn"
 
@@ -103,6 +108,8 @@ n_sizes=$(grep -c '^' "${du_fn}.new") || {
     raise 2 "no sizes found by du: '$PWD/${du_fn}.new'"
 }
 
+# chown and move log file
+chown "$lognm":"$lognm_group" "${du_fn}.new"
 /bin/mv -f "${du_fn}.new" "$du_fn"
 
 if [[ -s "${du_fails}.new" ]]
@@ -120,7 +127,3 @@ print_msg "Found $n_files filenames, reported sizes on $n_sizes"
 # sed prepends spaces to each line; head sends sigpipe to sort (causes pipefail)
 print_msg "Largest 12:"
 sort -rh "$du_fn" | head -n 12 | sed 's/^/    /' || handle_pipefails $?
-
-# chown log files
-chown "$lognm":"$lognm_group" "$chf_fn" "$du_fn"
-# chmod 0640 "$chf_fn" "$du_fn"
