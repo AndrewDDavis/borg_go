@@ -16,7 +16,7 @@ source "$src_dir/bgo_functions.sh"
 def_lognm
 
 bakdir="$lognm_home/.local/backups"
-[[ -d "$bakdir" ]] || mkdir -p "$bakdir"
+[[ ! -d "$bakdir" ]] && /bin/mkdir -p "$bakdir"
 
 
 # create a list of what's in /usr/local (nullglob is set)
@@ -39,14 +39,16 @@ then
     dbfile=/var/lib/plocate/plocate.db
 fi
 
-[[ -r ${dbfile:-} ]] && cp "$dbfile" "$bakdir"
+[[ -r ${dbfile:-} ]] && /bin/cp -p "$dbfile" "$bakdir"
 
 # back up "Session Buddy" backup files of the Chrome state, if any
 # - probably in ~/Downloads
-find "$lognm_home" -maxdepth 2 -name 'session_buddy_backup*.json' -exec  \
+find "$lognm_home"/Downloads/ -maxdepth 2 -name 'session_buddy_backup*.json' -exec  \
     /bin/mv -f {} "$bakdir" \;
 
-# OS dependent files
+
+### OS dependent files
+
 def_mach_id  # from bgo_functions: defines mach_name and mach_os
 
 if [[ $mach_os == linux ]]
@@ -66,6 +68,12 @@ then
     #  sudo dpkg --set-selections < dpkg-installed-applications.txt
     #  sudo apt-get -y update
     #  sudo apt-get dselect-upgrade
+
+    if [[ -n $( command -v dconf ) ]]
+    then
+        # back up gsettings database if available
+        dconf dump / > "$bakdir"/dconf-dump_backup.dump
+    fi
 
 elif [[ $mach_os == macos ]]
 then
