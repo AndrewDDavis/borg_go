@@ -16,6 +16,13 @@
 # - record total execution time
 # - code a borg recover tool, to pull all versions of a file into a temp directory, and diff them
 # - preserve file modified time when rotating logs
+# - consider borg 1.4's new BORG_EXIT_CODES=modern
+# - consider using the slashdot hack for borg create in 1.4: The slashdot hack in paths
+#   (recursion roots) is triggered by using /./:
+#   /this/gets/stripped/./this/gets/archived
+#   means to process that fs object, but strip the prefix on the left side of ./ from
+#   the archived items (in this case, this/gets/archived will be the path in the
+#   archived item).
 
 function print_usage {
 cat << EOF
@@ -27,11 +34,13 @@ cat << EOF
 
   Usage: borg-go [options] <command1 command2 ...>
 
-  Commands:
+  Commands
+
     create  -> create a new backup archive in the default repository
     prune   -> remove old archives according to rules
     check   -> check integrity of repo and latest archive
     compact -> save space in repo; runs automatically after prune
+    list    -> list recent backup archives, or contents of a specified archive
 
   Options:
     -n | --dry-run -> run create and/or prune without changing the repo, to see what
@@ -73,17 +82,26 @@ cmd_array=()
 
 while [ $# -gt 0 ]; do
     case $1 in
-        create | prune | check | compact )
-            cmd_array+=($1) ;;
-        -n | --dry-run )
-            dry_run="--dry-run" ;;
-        -q | --quiet )
-            quiet=true ;;
-        -h | -help | --help )
+        ( create | prune | check | compact )
+            cmd_array+=( $1 )
+        ;;
+        ( list )
+            BORG_LOGGING_CONF='' borg list "${@:2}"
+            exit 0
+        ;;
+        ( -n | --dry-run )
+            dry_run="--dry-run"
+        ;;
+        ( -q | --quiet )
+            quiet=true
+        ;;
+        ( -h | -help | --help | help )
             print_usage
-            exit 0 ;;
-        * )
-            raise 2 "Unrecognized option: '$1'" ;;
+            exit 0
+        ;;
+        ( * )
+            raise 2 "Unrecognized option: '$1'"
+        ;;
     esac
     shift
 done
@@ -158,14 +176,19 @@ main() {
 
 
     ### --- Main function ---
-    for cmd in "${cmd_array[@]}"; do
+    for cmd in "${cmd_array[@]}"
+    do
         case "$cmd" in
-            create  ) run_create ;;
-            prune   ) run_prune  && {
-                          [[ -z ${dry_run-} ]] && run_compact
-                      } ;;
-            check   ) run_check ;;
-            compact ) run_compact ;;
+            ( create )
+                bg_create ;;
+            ( prune )
+                run_prune && {
+                    [[ -z ${dry_run-} ]] && run_compact
+                } ;;
+            ( check )
+                run_check ;;
+            ( compact )
+                run_compact ;;
         esac
     done
 
@@ -192,7 +215,7 @@ main() {
 }
 
 
-function run_create {
+bg_create() (
 
     ### --- Create Backup Archive ---
     # Backup e.g. system config and user files into an archive named after this machine
@@ -213,15 +236,16 @@ function run_create {
 
     # include all patterns and recursion roots files in alphanum order
     # - note nullglob is in effect
-    pat_args=()
-    for f in "$BORG_CONFIG_DIR"/borg_recursion_roots*.txt  \
-             "$BORG_CONFIG_DIR"/borg_patterns*.txt
+    bc_pats=()
+
+    for fn in "$BORG_CONFIG_DIR"/borg_{recursion_roots,patterns}*.txt
     do
-        [[ -s $f ]] && pat_args+=(--patterns-from "$f")
+        [[ -s $fn ]] && bc_pats+=( --patterns-from "$fn" )
     done
 
-    (( "${#pat_args[@]}" == 0 )) && {
-        raise 2 "Empty patterns and recursion roots (pat_args)."
+    (( "${#bc_pats[@]}" == 0 )) && {
+
+        raise 2 "Empty patterns and recursion roots (bc_pats)."
     }
 
     rotate_logs
@@ -233,10 +257,13 @@ function run_create {
     # - using || to catch exit code 1, which borg uses for warnings
     #   note handle_borg_ec might add a warning to ping_msg
 
-    borg create ${dry_run-} --list --filter "$filters" --stats           \
-                --exclude-caches --exclude-if-present .nobackup          \
-                "${pat_args[@]}"                                         \
-                --info --show-rc ::'{hostname}-{now:%Y-%m-%dT%H.%M.%S}'  \
+    bc_opts=( ${dry_run-} )
+    bc_opts+=( --list --filter "$filters" --stats )               # list items backed up matching filters, and show stats
+    bc_opts+=( --info --show-rc )                                 # be verbose, log borg's return code
+    bc_opts+=( --exclude-caches --exclude-if-present .nobackup )  # exclude dirs containing CACHEDIR.TAG or .nobackup
+    bc_opts+=( --one-file-system )                                # do not backup mount-points
+
+    borg create "${bc_opts[@]}" "${bc_pats[@]}" ::'{hostname}-{now:%Y-%m-%dT%H.%M.%S}'  \
         || handle_borg_ec $?
 
 
@@ -267,7 +294,7 @@ function run_create {
 
     # signal successful backup
     "${src_dir}"/bgo_ping_hc.sh success -m "$ping_msg"
-}
+)
 
 function run_prune {
 
@@ -338,7 +365,7 @@ function run_prune {
     "${src_dir}"/bgo_ping_hc.sh success -m "$ping_msg"
 }
 
-function run_check {
+run_check() {
 
     ### --- Check Repo and Archive(s) ---
     # Examine backup repo and most recent archive to ensure validity
@@ -349,7 +376,7 @@ function run_check {
     # --progress ?
 }
 
-function run_compact {
+run_compact() {
 
     ### --- Compact Repo ---
     # actually free repo disk space by compacting segments
