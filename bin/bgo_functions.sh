@@ -16,6 +16,7 @@
 # src_dir=$(python3 -c "import os; print(os.path.dirname(os.path.realpath('$BS0')))")
 # source "$src_dir/bgo_functions.sh"
 
+# shellcheck shell=bash
 
 # Set preferred shell options for more robust scripts
 set -o nounset     # fail on unset variables
@@ -29,14 +30,18 @@ shopt -s nullglob  # non-matching glob patterns return null string
 umask 027
 
 print_msg() {
+
     # Print log-style messages to stderr
     # - usage: print_msg ERROR "the script had a problem"
     local msg_type=INFO
 
-    [[ $1 == @(DEBUG|INFO|WARNING|ERROR) ]] \
-        && { msg_type=$1; shift; }
+    [[ $1 == @(DEBUG|INFO|WARNING|ERROR) ]] &&
+        { msg_type=$1; shift; }
 
-    printf >&2 "%s %s %s\n" "$(date)" "${exc_fn--} [$msg_type]" "$*"
+    printf >&2 '%s %s %s\n' \
+        "$( date +'%F %T %Z' )" \
+        "${exc_fn--} [$msg_type]" \
+        "$*"
 }
 
 raise() {
@@ -45,40 +50,53 @@ raise() {
     #          raise w "file missing, that's not great but OK"
     local ec=${1:?"raise function requires exit code"}
     local msg_body=${2:?"raise function requires message"}
+
     local msg_type=ERROR
-    [[ $ec == w ]] && { msg_type=WARNING; ec=0; }
+    [[ $ec == w ]] &&
+        { msg_type=WARNING; ec=0; }
 
     print_msg "$msg_type" "$msg_body"
     exit $ec
 }
 
 # Handle interrupt and exceptions, giving useful debugging output
-trap -- 'raise 2 "${exc_fn--} was interrupted${FUNCNAME:+ (function $FUNCNAME)}"' INT TERM
-trap -- 'ec=$?
-ping_msg="Exception $ec in $0 at line $LINENO${FUNCNAME:+ (function stack: ${FUNCNAME[@]})}"
-[[ $0 == borg-go?(.sh) ]] && bgo_ping_hc failure -m "$ping_msg"
-raise $ec "$ping_msg"' ERR
+trap -- '
+    raise 2 "${exc_fn--} was interrupted${FUNCNAME:+ (function $FUNCNAME)}"
+' INT TERM
+
+trap -- '
+    ec=$?
+    ping_msg="Exception $ec in $0 at line $LINENO${FUNCNAME:+ (function stack: ${FUNCNAME[@]})}"
+    [[ $0 == borg-go?(.sh) ]] && bgo_ping_hc failure -m "$ping_msg"
+    raise $ec "$ping_msg"
+' ERR
 
 handle_pipefails() {
+
     # Ignore exit code 141 (pipefail, or sigpipe received) from simple command pipes.
     # - This occurs when a program (e.g. `head -1`) stops reading from a pipe.
     # - See [my answer][1] for details.
     #   [1]: https://unix.stackexchange.com/a/709880/85414
+    #
     # Usage:
     #   cmd1 | cmd2 || handle_pipefails $?
+    #
     # E.g. to test:
     #   yes | head -n 1 || handle_pipefails $?
-    # Returns 0 for $1=141, or returns the value of $1 otherwise.
+    #
+    # Returns 0 for $1=141, otherwise returns with the value of $1.
+
     (( $1 == 141 )) || return $1
 }
 
 def_mach_id() {
+
     # Set variables for machine name and OS
 
-    mach_name=$(hostname -s)
+    mach_name=$( hostname -s )
     mach_name=${mach_name,,}    # lowercase
 
-    mach_os=$(uname -s)
+    mach_os=$( uname -s )
     mach_os=${mach_os,,}
     [[ $mach_os == "darwin" ]] && mach_os=macos
 
@@ -86,20 +104,21 @@ def_mach_id() {
 }
 
 def_lognm() {
+
     # These scripts are likely run using `sudo` during a borg backup, meaning HOME
     # will be root's home. We can define the login name of user running sudo using
     # logname (checks owner of the tty)
-    lognm=$(logname 2>/dev/null) || true
+    lognm=$( logname 2>/dev/null ) || true
 
     # Handle case of running without sudo: when running with Systemd, Linux produces an
     # error code and an empty string; when running with Launchd, macOS produces
     # /var/empty for the home dir. In those cases, try to parse BORG_CONFIG_DIR for a
     # username:
     [[ -z $lognm || ~$lognm == /var/empty ]] \
-        && lognm=$(sed -E 's|/[^/]+/([^/]+)/.*|\1|' <<<"$BORG_CONFIG_DIR")
+        && lognm=$( sed -E 's|/[^/]+/([^/]+)/.*|\1|' <<<"$BORG_CONFIG_DIR" )
 
-    lognm_group=$(id -gn "$lognm")
-    lognm_home=$(eval echo ~"$lognm")  # NB variable replacement done _before_ execution
+    lognm_group=$( id -gn "$lognm" )
+    lognm_home=$( eval echo ~"$lognm" )  # NB variable replacement done _before_ execution
 
     [[ $lognm_home != "~$lognm" ]] || raise 2 "failed to get lognm: '$lognm'"
 }
