@@ -16,20 +16,22 @@ source "$src_dir/bgo_functions.sh"
 def_lognm
 
 bakdir="$lognm_home/.local/backups"
-[[ ! -d "$bakdir" ]] && /bin/mkdir -p "$bakdir"
+[[ ! -d "$bakdir" ]] \
+    && /bin/mkdir -p "$bakdir"
 
 
-# create a list of what's in /usr/local (nullglob is set)
-echo $'/usr/local/\n'        > "$bakdir"/usr-local-list.txt
-/bin/ls -l /usr/local/      >> "$bakdir"/usr-local-list.txt
-echo $'\n\n/usr/local/*\n'  >> "$bakdir"/usr-local-list.txt
-/bin/ls -l /usr/local/*     >> "$bakdir"/usr-local-list.txt
-/bin/ls -l /usr/local/share/man     >> "$bakdir"/usr-local-list.txt
+# Create a list of what's in /usr/local (nullglob is set)
+echo $'/usr/local/\n'           >  "$bakdir"/usr-local-list.txt
+/bin/ls -l /usr/local/          >> "$bakdir"/usr-local-list.txt
+echo $'\n\n/usr/local/*\n'      >> "$bakdir"/usr-local-list.txt
+/bin/ls -l /usr/local/*         >> "$bakdir"/usr-local-list.txt
+/bin/ls -l /usr/local/share/man >> "$bakdir"/usr-local-list.txt
 
-# also show it in tree form
-tree -a /usr/local > "$bakdir"/usr-local-tree.txt
+# - also show it in tree form
+command tree -a /usr/local > "$bakdir"/usr-local-tree.txt
 
-# the (p/m)locate db also contains paths for most files on the system
+
+# The (p/m)locate db also contains paths for most files on the system
 if [[ -n ${LOCATE_PATH:-} ]]
 then
     dbfile=$LOCATE_PATH
@@ -39,12 +41,62 @@ then
     dbfile=/var/lib/plocate/plocate.db
 fi
 
-[[ -r ${dbfile:-} ]] && /bin/cp -p "$dbfile" "$bakdir"
+if [[ -r ${dbfile:-} ]]
+then
+    /bin/cp -p "$dbfile" "$bakdir"
+fi
 
-# back up "Session Buddy" backup files of the Chrome state, if any
+
+# List packages installed through npm, pip, pipx, and flatpak
+# - you may need to pass PIPX_GLOBAL_HOME if set
+
+if npm_pth=$( builtin type -P npm )
+then
+    "$npm_pth" --version > "${bakdir}/npm-list-g.txt"
+    "$npm_pth" list -g --depth=0 >> "${bakdir}/npm-list-g.txt"
+fi
+
+if pip_pth=$( builtin type -P pip )
+then
+    "$pip_pth" --version > "${bakdir}/pip-list.txt"
+    "$pip_pth" list >> "${bakdir}/pip-list.txt"
+fi
+
+if pipx_pth=$( builtin type -P pipx )
+then
+    if [[ ! -v PIPX_GLOBAL_HOME && -d /usr/local/opt/pipx ]]
+    then
+        export PIPX_GLOBAL_HOME=/usr/local/opt/pipx
+    fi
+
+    "$pipx_pth" --version > "${bakdir}/pipx-list-global.txt"
+    "$pipx_pth" list --global >> "${bakdir}/pipx-list-global.txt"
+fi
+
+if fp_pth=$( builtin type -P flatpak )
+then
+    "$fp_pth" --version > "${bakdir}/flatpak-list-app.txt"
+    "$fp_pth" list --app >> "${bakdir}/flatpak-list-app.txt"
+fi
+
+# Back up "Session Buddy" backup files of the Chrome state, if any
 # - probably in ~/Downloads
-find "$lognm_home"/Downloads/ -maxdepth 2 -name 'session_buddy_backup*.json' -exec  \
-    /bin/mv -f {} "$bakdir" \;
+command find "$lognm_home"/Downloads/ -maxdepth 2 \
+    -name 'session_buddy_backup*.json' \
+    -exec /bin/mv -f {} "$bakdir" \;
+
+
+# Backup VS-Code user settings files
+if [[ -r "$lognm_home"/.config/Code/User/settings.json ]]
+then
+    vsc_bakdir="$bakdir"/vscode-user_config
+    /bin/mkdir -p "$vsc_bakdir"
+    for fn in "$lognm_home"/.config/Code/User/{settings.json,keybindings.json,snippets}
+    do
+        [[ -r $fn ]] && /bin/cp -pLRf "$fn" "$vsc_bakdir"/
+    done
+    unset fn vsc_bakdir
+fi
 
 
 ### OS dependent files
@@ -84,4 +136,5 @@ else
 fi
 
 # chown these files to user
+# - could also use ACLs with setfacl here, to preserve orig ownership
 chown -R "$lognm":"$lognm_group" "$bakdir"
