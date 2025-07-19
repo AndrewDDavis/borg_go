@@ -44,6 +44,8 @@ Depending on the configuration in `/etc/sudoers` and `/etc/sudoers.d/`, which ca
 - Use `which` or `command` to pass the full path: `sudo $(command -v borg-go) ...`. This can be aliased, e.g. as `bgo`.
 - Set the user's PATH: `sudo PATH=$PATH borg-go ...`. This can be aliased, e.g. as `sudop`.
 
+When running the `prune` action, the options provided by `borg-go` should keep every archive within the last 14 days, and weekly archives for 2 weeks that have a backup before that, then similarly for 6 monthly archives, and 3 yearly archives.
+
 ## After
 
 Some useful commands to see the result of your borg create/prune runs:
