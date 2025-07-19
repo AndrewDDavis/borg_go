@@ -12,6 +12,8 @@
 # TODO:
 # - du can take a long time when running with ionice; consider running the
 #   chfile_sizes script in non-blocking mode
+# - run without set -eE, as this just causes so many problems, e.g. handling pipefail from sort
+#   use an ERR trap instead
 # - write a logs command for borg-go
 # - record total execution time
 # - code a borg recover tool, to pull all versions of a file into a temp directory, and diff them
@@ -63,11 +65,11 @@ set -eE
 # - BASH_SOURCE and $0 likely refer to symlink
 # - exc_fn and exc_dir refer to the executable path as called
 BS0=${BASH_SOURCE[0]}
-exc_fn=$(basename -- "$BS0")
-exc_dir=$(dirname -- "$BS0")
+exc_fn=$( basename -- "$BS0" )
+exc_dir=$( dirname -- "$BS0" )
 
 # - src_dir refers to the resolved absolute canonical path to the script dir
-src_dir=$(python3 -c "import os.path as osp; print(osp.dirname(osp.realpath('$BS0')))")
+src_dir=$( python3 -c "import os.path as osp; print(osp.dirname(osp.realpath('$BS0')))" )
 
 
 # Configure some common variables, functions, and shell options (e.g. globbing rules)
@@ -75,7 +77,8 @@ source "$src_dir/bgo_functions.sh"
 
 
 # Parse arguments
-[[ $# -eq 0 ]] && { print_usage; exit 0; }
+[[ $# -eq 0  || $1 == @(-h|--help|help) ]] \
+    && { print_usage; exit 0; }
 
 # - keep track of create/prune/check to preserve order
 cmd_array=()
@@ -95,10 +98,6 @@ while [ $# -gt 0 ]; do
         ( -q | --quiet )
             quiet=true
         ;;
-        ( -h | -help | --help | help )
-            print_usage
-            exit 0
-        ;;
         ( * )
             raise 2 "Unrecognized option: '$1'"
         ;;
@@ -108,17 +107,18 @@ done
 
 
 # Check for valid command(s)
-(( "${#cmd_array[@]}" == 0 )) && {
-    raise w "No valid commands received, stay frosty."
-}
+(( "${#cmd_array[@]}" == 0 )) \
+    && raise w "No valid commands received, stay frosty."
 
 # Check for root
 # - See the ReadMe for discussion on the running user for borg.
-[[ $(id -u) -eq 0 ]] || { raise 2 "root or sudo required."; }
+[[ $( id -u ) -eq 0 ]] \
+    || raise 2 "root or sudo required."
 
 
 # Environment variables
 # - set in user ~/.bashrc or launchd plist: BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
+# - these are retained by sudo, per my sudoers policy.
 # - unset, when running unencrypted locally or over a LAN: BORG_PASSPHRASE
 # - cache and security should go in root's home if running with `sudo`. This is to
 #   prevent permissions problems when later running e.g. `borg info` as regular user.
@@ -137,9 +137,8 @@ fi
 
 # Other required scripts should be in src_dir
 scr_chk() {
-    [[ -x "${src_dir}/${1}.sh" ]] || {
-        raise 2 $(printf '%s\n' "no executable found at ${src_dir}/${1}.sh")
-    }
+    [[ -x "${src_dir}/${1}.sh" ]] \
+        || raise 9 "no executable found at ${src_dir}/${1}.sh"
 }
 
 scr_chk bgo_chfile_sizes
@@ -150,11 +149,22 @@ scr_chk bgo_prep_backup
     && scr_chk bgo_check_mount
 
 
-# Ensure log exists
-# - borg should append for this session, per borg_logging.conf
+# Ensure log dir and file exists
 logging_dir=$BORG_CONFIG_DIR/log
-[[ -d $logging_dir ]] || /bin/mkdir -p "$logging_dir"
-log_fn=$logging_dir/borg_log.txt
+[[ -d $logging_dir ]] \
+    || /bin/mkdir -p "$logging_dir"
+
+if [[ -n ${dry_run-} ]]
+then
+    # - use a separate log file on dry-runs, and overwrite every time
+    # - e.g. borg_logging.conf becomes borg_logging-dryrun.conf
+    BORG_LOGGING_CONF=${BORG_LOGGING_CONF/%.conf/-dryrun.conf}
+    log_fn=$logging_dir/borg_dryrun_log.txt
+else
+    # - borg should append for this session, per borg_logging.conf, but bg_create does
+    #   rotate the log files
+    log_fn=$logging_dir/borg_log.txt
+fi
 touch "$log_fn"
 
 
@@ -162,7 +172,7 @@ main() {
 
     ### --- Pre-run commands ---
     # mount repo if needed (erikson, mendeleev)
-    [[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] && {
+    [[ -n ${BORG_MNT_REQD-}  && $BORG_MNT_REQD != 0 ]] && {
         print_msg "Mounting backup repo"
         "${src_dir}"/bgo_check_mount.sh
     }
@@ -175,20 +185,25 @@ main() {
     }
 
 
-    ### --- Main function ---
+    ### --- Main operations ---
     for cmd in "${cmd_array[@]}"
     do
         case "$cmd" in
             ( create )
-                bg_create ;;
+                bg_create
+            ;;
             ( prune )
                 run_prune && {
-                    [[ -z ${dry_run-} ]] && run_compact
-                } ;;
+                    [[ -z ${dry_run-} ]] \
+                        && run_compact
+                }
+            ;;
             ( check )
-                run_check ;;
+                run_check
+            ;;
             ( compact )
-                run_compact ;;
+                run_compact
+            ;;
         esac
     done
 
@@ -204,12 +219,16 @@ main() {
     # - should only be necessary for newly created files
     def_lognm    # from bgo_functions: sets lognm, lognm_group, lognm_home
 
-    find "$BORG_CONFIG_DIR" \( -name 'borg_log.txt*'                 \
-                            -o -name 'borg_log_chfile*.txt'          \
-                            -o -name 'borg_log_*-stats.txt'          \
-                            -o -name 'borg-go_[ls]*d_out.txt*' \)    \
-                            -user "$(id -un 0)"                      \
-                            -exec chown "$lognm":"$lognm_group" '{}' \;
+    command find "$BORG_CONFIG_DIR" \
+        \( \
+            -name 'borg_log.txt*' \
+            -o -name 'borg_dryrun_log.txt' \
+            -o -name 'borg_log_chfile*.txt' \
+            -o -name 'borg_log_*-stats.txt' \
+            -o -name 'borg-go_[ls]*d_out.txt*' \
+        \) \
+        -user "$( id -un 0 )" \
+        -exec chown "$lognm":"$lognm_group" '{}' \;
 
     print_msg "borg-go done."
 }
@@ -222,7 +241,7 @@ bg_create() (
     local ping_msg
 
     print_msg "Starting backup ..."
-    "${src_dir}"/bgo_ping_hc.sh start -m "borg ${dry_run-$'\b'} cmds: ${cmd_array[*]}"
+    "${src_dir}"/bgo_ping_hc.sh start -m "borg${dry_run:+" ${dry_run}"} cmds: ${cmd_array[*]}"
 
     print_msg "- running pre-backup script"
     "${src_dir}"/bgo_prep_backup.sh
@@ -235,23 +254,39 @@ bg_create() (
     fi
 
     # include all patterns and recursion roots files in alphanum order
-    # - note nullglob is in effect
-    bc_pats=()
+    # - NB, nullglob is in effect
+    local bc_pats=() rec_roots=()
 
     for fn in "$BORG_CONFIG_DIR"/borg_{recursion_roots,patterns}*.txt
     do
-        [[ -s $fn ]] && bc_pats+=( --patterns-from "$fn" )
+        [[ -s $fn ]] \
+            && bc_pats+=( --patterns-from "$fn" )
+
+        # report the recursion roots in effect
+        mapfile -t -O"${#rec_roots[*]}" rec_roots < \
+            <( command grep -hE '^R ' "$fn" || true )
     done
 
-    (( "${#bc_pats[@]}" == 0 )) && {
-
+    if (( ${#bc_pats[*]} == 0 ))
+    then
         raise 2 "Empty patterns and recursion roots (bc_pats)."
-    }
 
-    rotate_logs
+    elif (( ${#rec_roots[*]} == 0 ))
+    then
+        raise 3 "No recursion roots found in pattern files"
+    fi
+
+    if [[ -z ${dry_run-} ]]
+    then
+        rotate_logs
+    fi
 
     # Borg call
-    print_msg "- calling borg create ${dry_run-$'\b'}"
+    print_msg "- calling borg create${dry_run:+" ${dry_run}"} with recursion roots:"
+    printf >&2 '    '
+    printf >&2 '%s,  ' "${rec_roots[@]:0:${#rec_roots[*]}-1}"
+    printf >&2 '%s\n' "${rec_roots[@]:(-1)}"
+
     # - add -p for progress
     # - compression is lz4 by default
     # - using || to catch exit code 1, which borg uses for warnings
@@ -305,7 +340,7 @@ function run_prune {
     print_msg "Starting prune ..."
 
     # borg command
-    print_msg "- calling borg prune ${dry_run-$'\b'}"
+    print_msg "- calling borg prune${dry_run:+" ${dry_run}"}"
     # - The '{hostname}-' prefix limits the prune operation to the archives associated
     #   with the present machine.
     # - N.B. the keep rules do not operate exactly as you may expect, because intervals
@@ -371,8 +406,9 @@ run_check() {
     # Examine backup repo and most recent archive to ensure validity
     print_msg "Starting check ..."
 
-    borg check --last 1 -a '{hostname}-*' \
-               --info --show-rc ::
+    borg check \
+        --last 1 -a '{hostname}-*' \
+        --info --show-rc ::
     # --progress ?
 }
 
@@ -383,8 +419,9 @@ run_compact() {
     # - this is most useful after delete and prune operations
     print_msg "Starting compact ..."
 
-    borg compact --threshold 1 \
-                 --info --show-rc ::
+    borg compact \
+        --threshold 1 \
+        --info --show-rc ::
 }
 
 rotate_logs() {
