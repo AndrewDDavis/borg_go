@@ -24,7 +24,8 @@ source "$src_dir/bgo_functions.sh"
 # find config dir based on logged-in user name (when running with sudo)
 def_lognm  # from bgo_functions: defines lognm, lognm_group, lognm_home
 
-[[ -z ${BORG_CONFIG_DIR-} ]] && BORG_CONFIG_DIR="$lognm_home/.config/borg"
+[[ -z ${BORG_CONFIG_DIR-} ]] \
+    && BORG_CONFIG_DIR="$lognm_home/.config/borg"
 
 cd "$BORG_CONFIG_DIR" \
     || raise 2 "could not cd to config dir: '$BORG_CONFIG_DIR'"
