@@ -9,23 +9,6 @@
 # by Andrew Davis (addavis@gmail.com)
 # v0.2 (Dec 2023)
 
-# TODO:
-# - du can take a long time when running with ionice; consider running the
-#   chfile_sizes script in non-blocking mode
-# - run without set -eE, as this just causes so many problems, e.g. handling pipefail from sort
-#   use an ERR trap instead
-# - write a logs command for borg-go
-# - record total execution time
-# - code a borg recover tool, to pull all versions of a file into a temp directory, and diff them
-# - preserve file modified time when rotating logs
-# - consider borg 1.4's new BORG_EXIT_CODES=modern
-# - consider using the slashdot hack for borg create in 1.4: The slashdot hack in paths
-#   (recursion roots) is triggered by using /./:
-#   /this/gets/stripped/./this/gets/archived
-#   means to process that fs object, but strip the prefix on the left side of ./ from
-#   the archived items (in this case, this/gets/archived will be the path in the
-#   archived item).
-
 function print_usage {
 cat << EOF
 
