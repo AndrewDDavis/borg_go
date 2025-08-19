@@ -9,7 +9,7 @@
 # by Andrew Davis (addavis@gmail.com)
 # v0.2 (Dec 2023)
 
-function print_usage {
+print_usage() {
 cat << EOF
 
   borg-go
@@ -66,7 +66,8 @@ source "$src_dir/bgo_functions.sh"
 # - keep track of create/prune/check to preserve order
 cmd_array=()
 
-while [ $# -gt 0 ]; do
+while (( $# > 0 ))
+do
     case $1 in
         ( create | prune | check | compact )
             cmd_array+=( $1 )
@@ -100,7 +101,8 @@ done
 
 
 # Environment variables
-# - set in user ~/.bashrc or launchd plist: BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
+# - set in user ~/.bashrc or launchd plist: BORG_REPO, BORG_CONFIG_DIR,
+#   BORG_LOGGING_CONF, and BORG_EXIT_CODES
 # - these are retained by sudo, per my sudoers policy.
 # - unset, when running unencrypted locally or over a LAN: BORG_PASSPHRASE
 # - cache and security should go in root's home if running with `sudo`. This is to
@@ -229,7 +231,8 @@ bg_create() (
     print_msg "- running pre-backup script"
     "${src_dir}"/bgo_prep_backup.sh
 
-    if [[ -n ${dry_run-} ]]; then
+    if [[ -n ${dry_run-} ]]
+    then
         # dry-run affects item flags in log
         filters='x-'
     else
@@ -285,7 +288,8 @@ bg_create() (
         || handle_borg_ec $?
 
 
-    if [[ -n ${dry_run-} ]]; then
+    if [[ -n ${dry_run-} ]]
+    then
         # stats and changed files only supported without dry-run
         ping_msg+="no stats from create --dry-run"
 
@@ -298,12 +302,13 @@ bg_create() (
         bc_stats_fn="$logging_dir/borg_log_create-stats.txt"
         grep -B 6 -A 10 'INFO Duration' "$log_fn" > "$bc_stats_fn.new"
 
-        if [[ $(grep -c '^' "$bc_stats_fn.new") -eq 17 ]]; then
-
+        if [[ $(grep -c '^' "$bc_stats_fn.new") -eq 17 ]]
+        then
             print_msg "- recording stats block"
             /bin/mv -f "$bc_stats_fn.new" "$bc_stats_fn"
             ping_msg+="borg-create stats:"$'\n'
             ping_msg+=$(< "$bc_stats_fn")
+
         else
             ping_msg+="borg-create stats block from log not as expected: $bc_stats_fn.new"
             print_msg WARNING "$ping_msg"
@@ -314,7 +319,7 @@ bg_create() (
     "${src_dir}"/bgo_ping_hc.sh success -m "$ping_msg"
 )
 
-function run_prune {
+run_prune() {
 
     ### --- Prune Backup Archives ---
     # Remove old backups according to schedule
@@ -357,7 +362,8 @@ function run_prune {
                --keep-yearly 3                              \
                --info --show-rc ::
 
-    if [[ -n ${dry_run-} ]]; then
+    if [[ -n ${dry_run-} ]]
+    then
         # stats only supported without dry-run
         ping_msg="no stats from prune --dry-run"$'\n'
 
@@ -366,8 +372,8 @@ function run_prune {
         bp_stats_fn="$logging_dir/borg_log_prune-stats.txt"
         grep -B 2 -A 5 'INFO Deleted data' "$log_fn" > "${bp_stats_fn}.new"
 
-        if [[ $(grep -c '^' "${bp_stats_fn}.new") -eq 8 ]]; then
-
+        if [[ $(grep -c '^' "${bp_stats_fn}.new") -eq 8 ]]
+        then
             print_msg "- recording stats block"
             /bin/mv -f "${bp_stats_fn}.new" "$bp_stats_fn"
             ping_msg="borg-prune stats:"$'\n'
@@ -449,20 +455,24 @@ rotate_logs() {
     fi
 }
 
-function handle_borg_ec {
-    # Handle non-zero exit codes from borg
-    # - borg exits with ec=1 for warnings, which shouldn't
-    #   bring down the whole script, but should be reported
-    ec=$1
+handle_borg_ec() {
 
-    if [[ $ec -eq 1 ]]; then
+    # Handle non-zero exit codes from borg
+    # - borg exits with ec=1 or 100-127 for warnings, which shouldn't
+    #   bring down the whole script, but should be reported
+    local -i ec=$1
+    shift
+
+    if (( ec == 1 || ( ec > 99 && ec < 128 ) ))
+    then
         # relay borg warning
-        ping_msg="In ${FUNCNAME[1]}, borg exited with code 1; WARNINGs from borg_log.txt:"$'\n'
-        ping_msg+=$(grep WARNING "$log_fn")$'\n'
+        ping_msg="${FUNCNAME[1]}(): borg exited with code $ec; WARNINGs from borg_log.txt:"$'\n'
+        ping_msg+=$( command grep WARNING "$log_fn" )$'\n'
         print_msg WARNING "$ping_msg"
+
     else
         # trigger the trap error handling
-        (exit $ec)
+        ( exit $ec )
     fi
 }
 
