@@ -4,11 +4,13 @@ Scripts to automate and support running backups using [BorgBackup](https://www.b
 
 ## Installation
 
-Symlink the `borg-go.sh` file as `borg-go` from a directory on your PATH, e.g. `~/.local/bin` or `/usr/local/bin`. To make running `borg-go` using `sudo` as simple as possible, use a directory on root's path, e.g. `/usr/local/bin`. The `import_func.sh` script should also be symlinked from there so that `borg-go` can import its dependencies.
+ 1. Download or clone the `borg-go` repository to a convenient place on your computer, e.g. into `~/Projects/` or `/usr/local/opt/`.
 
+ 2. Symlink the `borg-go.sh` file as `borg-go` from a directory on your PATH. You could use `~/.local/bin`, but to simplify running `borg-go` with `sudo`, use a directory on root's path, e.g. `/usr/local/bin`.
 
+ 3. The `import_func.sh` script should also be symlinked from the directory on your PATH, so that `borg-go` can import its dependencies. This script is part of the [Bash-Library](https://github.com/AndrewDDavis/Bash-Library) project of functions that support shell scripting. You may wish to install the whole Bash Library, or only the required dependencies of `borg-go`: `docsh`, `err_msg`, `vrb_msg`, `physpath`, `array_match`, `run_vrb`, and `ignore_sigpipe`.
 
-The `bgo_link.sh` script is useful for creating the links. Run it with `-h` to see command usage help.
+The `bgo_link.sh` script is ~~useful~~ (out of date) for creating the links. Run it with `-h` to see command usage help.
 
 ### Installed Scripts
 
