@@ -7,170 +7,96 @@
 #   https://borgbackup.readthedocs.io/en/stable/quickstart.html#automating-backups
 #
 # by Andrew Davis (addavis@gmail.com)
-# v0.2 (Dec 2023)
+# v0.3 (Aug 2025)
 
-print_usage() {
-cat << EOF
+: """Run Borg-Backup with the typical config to create, prune, and check backups
 
-  borg-go
-  -------
-  This script runs Borg-Backup with the typical configuration and command options to
-  create, prune, and check backups.
+    Usage
 
-  Usage: borg-go [options] <command1 command2 ...>
+        borg-go [options] <command1 command2 ...>
+        borg-go [options] command [command-arguments ...]
 
-  Commands
+    Commands
 
-    create  -> create a new backup archive in the default repository
-    prune   -> remove old archives according to rules
-    check   -> check integrity of repo and latest archive
-    compact -> save space in repo; runs automatically after prune
-    list    -> list recent backup archives, or contents of a specified archive
+      create
+      : Create a new backup archive in the default repository
 
-  Options:
-    -n | --dry-run -> run create and/or prune without changing the repo, to see what
-                      would be backed up or removed. check and compact are not affected
-                      by the dry-run option, but compact will not run automatically
-                      after prune on a dry-run.
+      prune
+      : Remove old archives according to rules
 
-    -q | --quiet -> decrease info messages.
+      check
+      : Check integrity of repo and latest archive
 
-  For config and setup, see readme.
+      compact
+      : Save space in repo; runs automatically after prune
 
-EOF
-}
+      list [args]
+      : List recent backup archives, or contents of a specified archive. Arguments may
+        be supplied to provide options to the list command, or specify a repository or
+        a particular archive to list. By default, the options --consider-checkpoints and
+        --last=10 are used, and the default repository is listed unless the --local
+        option was used. No other commands may be used with list.
 
-# Script options for shell
-# - e = errexit : exit on non-zero pipeline, list, compound command
-# - E = errtrace : trap on ERR is inherited by shell functions, subshells, etc.
-set -eE
+    Options
 
-# - BASH_SOURCE and $0 likely refer to symlink
-# - exc_fn and exc_dir refer to the executable path as called
-BS0=${BASH_SOURCE[0]}
-exc_fn=$( basename -- "$BS0" )
-exc_dir=$( dirname -- "$BS0" )
+      --local [paths]
+      : Backup to a local repo (i.e., on the present machine), for use when the regular
+        repo is not available. Set the BORG_LOCAL_REPO environment variable to the path
+        of the local repo. In this mode, a separate log file is used, and borg-go
+        does not enforce running as root.
 
-# - src_dir refers to the resolved absolute canonical path to the script dir
-src_dir=$( python3 -c "import os.path as osp; print(osp.dirname(osp.realpath('$BS0')))" )
+        The given paths are used as recursion roots instead of the defaults, but the
+        configured pattern files are used to exclude files such as caches. Consider
+        using the borg slashdot hack for these paths (recursion roots), as
+        /path/is/stripped/./path/in/archive, e.g. /home/user/./Documents. If no paths
+        are given, the default recursion roots are used to create a full backup to the
+        local repo.
 
+      --all
+      : When running check, select all archives for check, rather than just the last 1
+        with a name that matches the hostname. Additional selections may be made along
+        with --all using the command arguments.
 
-# Configure some common variables, functions, and shell options (e.g. globbing rules)
-source "$src_dir/bgo_functions.sh"
+      -n, --dry-run
+      : Run create and/or prune without changing the repo, to see what would be backed
+        up or removed. The check and compact commands are not affected by the dry-run
+        option, but compact will not run automatically after prune on a dry-run. This
+        option also increases verbosity as in -v.
 
+      -v, --verbose
+      : Increase verbosity level of borg-go. Borg itself runs with --info verbosity.
 
-# Parse arguments
-[[ $# -eq 0  || $1 == @(-h|--help|help) ]] \
-    && { print_usage; exit 0; }
+    Examples
 
-# - keep track of create/prune/check to preserve order
-cmd_array=()
+        borg-go create prune check
+        borg-go --local ~/./Documents create
+        borg-go --local list
+        borg-go --local check --repair
 
-while (( $# > 0 ))
-do
-    case $1 in
-        ( create | prune | check | compact )
-            cmd_array+=( $1 )
-        ;;
-        ( list )
-            BORG_LOGGING_CONF='' borg list "${@:2}"
-            exit 0
-        ;;
-        ( -n | --dry-run )
-            dry_run="--dry-run"
-        ;;
-        ( -q | --quiet )
-            quiet=true
-        ;;
-        ( * )
-            raise 2 "Unrecognized option: '$1'"
-        ;;
-    esac
-    shift
-done
+    For config and setup, refer to the README file.
+"""
 
+borg-go() {
 
-# Check for valid command(s)
-(( "${#cmd_array[@]}" == 0 )) \
-    && raise w "No valid commands received, stay frosty."
+    # setup the environment: shell options, umask, traps, variables for mach_os, lognm,
+    # borg_cmd, etc.
+    # - ERR trap will cause exit for non-zero return statuses in this function
+    _bg_setup
 
-# Check for root
-# - See the ReadMe for discussion on the running user for borg.
-[[ $( id -u ) -eq 0 ]] \
-    || raise 2 "root or sudo required."
+    # handle args; keep track of create/prune/check to preserve order
+    local cmd_array=() cmd_args=() _dryrun _local _all rec_roots=()
+    _bg_args "$@"
+    shift $#
 
+    # check for required scripts, running user, borg setup like BORG_REPO, etc.
+    local repo_uri log_fn logging_dir
+    _bg_pre-run
 
-# Environment variables
-# - set in user ~/.bashrc or launchd plist: BORG_REPO, BORG_CONFIG_DIR,
-#   BORG_LOGGING_CONF, and BORG_EXIT_CODES
-# - these are retained by sudo, per my sudoers policy.
-# - unset, when running unencrypted locally or over a LAN: BORG_PASSPHRASE
-# - cache and security should go in root's home if running with `sudo`. This is to
-#   prevent permissions problems when later running e.g. `borg info` as regular user.
-export BORG_CACHE_DIR=${XDG_CACHE_HOME:-$HOME/.cache}/borg
-export BORG_SECURITY_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/borg/security
+    # check for list command
+    bg_list
 
-# If PATH was reset, borg-go may be harder to find, e.g. without setting up sudoers,
-# or running from launchd/systemd/cron.
-# - However, we should still be able to find the supporting scripts in src_dir.
-# - Thus, borg-go should run fine as e.g. `sudo $(which borg-go)`.
-# - no longer used: $PATH != *"$exc_dir"*
-if [[ -z $(command -v borg-go) && ${quiet:-} != true ]]
-then
-    print_msg "borg-go dir is not on path, consider using $src_dir/bgo_link.sh"
-fi
-
-# Other required scripts should be in src_dir
-scr_chk() {
-    [[ -x "${src_dir}/${1}.sh" ]] \
-        || raise 9 "no executable found at ${src_dir}/${1}.sh"
-}
-
-scr_chk bgo_chfile_sizes
-scr_chk bgo_ping_hc
-scr_chk bgo_prep_backup
-
-[[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] \
-    && scr_chk bgo_check_mount
-
-
-# Ensure log dir and file exists
-logging_dir=$BORG_CONFIG_DIR/log
-[[ -d $logging_dir ]] \
-    || /bin/mkdir -p "$logging_dir"
-
-if [[ -n ${dry_run-} ]]
-then
-    # - use a separate log file on dry-runs, and overwrite every time
-    # - e.g. borg_logging.conf becomes borg_logging-dryrun.conf
-    BORG_LOGGING_CONF=${BORG_LOGGING_CONF/%.conf/-dryrun.conf}
-    log_fn=$logging_dir/borg_dryrun_log.txt
-else
-    # - borg should append for this session, per borg_logging.conf, but bg_create does
-    #   rotate the log files
-    log_fn=$logging_dir/borg_log.txt
-fi
-touch "$log_fn"
-
-
-main() {
-
-    ### --- Pre-run commands ---
-    # mount repo if needed (erikson, mendeleev)
-    [[ -n ${BORG_MNT_REQD-}  && $BORG_MNT_REQD != 0 ]] && {
-        print_msg "Mounting backup repo"
-        "${src_dir}"/bgo_check_mount.sh
-    }
-
-    # otherwise, check that ssh connection is possible
-    [[ ${BORG_REPO:0:6} == "ssh://" ]] && {
-        _rem=${BORG_REPO:6}
-        _rem=${_rem%%/*}
-        ssh "$_rem" true
-    }
-
-
-    ### --- Main operations ---
+    # Main ops
+    local cmd cre_rc chk_rc
     for cmd in "${cmd_array[@]}"
     do
         case "$cmd" in
@@ -178,304 +104,328 @@ main() {
                 bg_create
             ;;
             ( prune )
-                run_prune && {
-                    [[ -z ${dry_run-} ]] \
-                        && run_compact
-                }
+                bg_prune
+                [[ ! -v _dryrun ]] \
+                    && bg_compact
             ;;
             ( check )
-                run_check
+                bg_check
             ;;
             ( compact )
-                run_compact
+                bg_compact
             ;;
         esac
     done
 
+    _bg_post-run
+}
 
-    ### --- Post-run commands ---
-    # unmount
-    [[ -n ${BORG_MNT_REQD-} && $BORG_MNT_REQD != 0 ]] && {
-        print_msg "Unmounting backup repo"
-        "${src_dir}"/bgo_check_mount.sh -u
+_bg_setup() {
+
+    # - exc_fn: executable path as called, which is likely a symlink
+    exc_fn=$( basename -- "${BASH_SOURCE[0]}" )
+    # - src_dir: resolved absolute canonical path to the script dir
+    src_dir=$( command python3 -c "from os import path; print(path.dirname(path.realpath('${BASH_SOURCE[0]}')))" ) \
+        || return
+    # Configure some common variables, functions, shell options, traps
+    # - e.g. set nounset, extglob, umask=027
+    source "${src_dir}/bgo_env_setup.sh"
+}
+
+_bg_args() {
+
+    # Parse arguments
+    [[ $# -eq 0  || $1 == @(-h|--help|help) ]] \
+        && { docsh -TD; return; }
+
+    # TODO:
+    # - allow chfile_sizes command
+
+    while (( $# > 0 ))
+    do
+        case $1 in
+            ( create | prune | check | compact )
+                cmd_array+=( "$1" )
+            ;;
+            ( list )
+                cmd_array+=( "$1" )
+                cmd_args=( "${@:2}" )
+                shift $#
+                break
+            ;;
+            ( --local )
+                _local=1
+                (( ++_verb ))
+                while [[ -v 2  && $2 != @(-*|create|prune|check|compact|list) ]]
+                do
+                    rec_roots+=( "$2" )
+                    shift
+                done
+            ;;
+            ( --all )
+                _all=1
+            ;;
+            ( -n | --dry-run )
+                _dryrun='--dry-run'
+                (( ++_verb ))
+            ;;
+            ( -v | --verbose )
+                (( ++_verb ))
+            ;;
+            ( -* )
+                # args for a command
+                if (( ${#cmd_array[*]} == 0 ))
+                then
+                    err_msg -d 3 "No command, but received option '$1'"
+                    return
+
+                elif (( ${#cmd_array[*]} > 1 ))
+                then
+                    err_msg -d 4 "More than one command, but received option '$1'"
+                    return
+                fi
+
+                cmd_args=( "$@" )
+                shift $#
+                break
+            ;;
+            ( * )
+                err_msg -d 2 "Unrecognized option: '$1'"
+                return
+            ;;
+        esac
+        shift
+    done
+}
+
+_bg_pre-run() {
+
+    trap 'return' ERR
+    trap 'trap - return err' RETURN
+
+    # Check for valid command(s)
+    (( ${#cmd_array[*]} > 0 )) \
+        || err_msg -d 2 "No valid commands received, stay frosty."
+
+    # Borg environment variables
+    # - Some variables are set in ~/.bashrc or launchd plist, and retained by sudo,
+    #   per my sudoers policy: BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF, and
+    #   BORG_EXIT_CODES.
+    # - When running unencrypted locally or over a LAN, this is unset: BORG_PASSPHRASE
+    # - Cache and security dirs should go in root's home when running under sudo.
+    #   This is to prevent permissions problems when later running e.g. `borg info`
+    #   as regular user.
+    [[ -n ${BORG_CONFIG_DIR-} ]] \
+        || export BORG_CONFIG_DIR=${lognm_home}/.config/borg
+    export BORG_CACHE_DIR=${XDG_CACHE_HOME:-$HOME/.cache}/borg
+    export BORG_SECURITY_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/borg/security
+
+    if (( running_user != 0 )) \
+        && [[ ${cmd_array[*]} != list  && ! -v _local ]]
+    then
+        # running as root enforced
+        # - See the ReadMe for discussion on the running user for borg
+        err_msg -d 3 "root or sudo required for remote repo commands beyond list"
+    fi
+
+    # Lock file
+    if [[ -e ${BORG_CONFIG_DIR}/borg-go.lock ]]
+    then
+        err_msg -d 2 "lock file found: '${BORG_CONFIG_DIR}/borg-go.lock'"
+    else
+        printf '%s\n' "$$" > "${BORG_CONFIG_DIR}/borg-go.lock"
+    fi
+
+    # Check for required scripts
+    # - If PATH was reset (e.g. by sudo), borg-go may be harder to find, e.g. without
+    #   setting up sudoers, or running from launchd/systemd/cron.
+    # - However, we should still be able to find the supporting scripts in src_dir.
+    # - Thus, borg-go should run fine as e.g. `sudo $(which borg-go)`.
+    import_func -l bgo_chfile_sizes
+    import_func -l bgo_ping_hc
+    import_func -l bg_create
+    bgo_scr_run --check bgo_prep_backupdir
+
+    # repo and archive defn
+    if [[ -v _local ]]
+    then
+        unset BORG_REPO
+        [[ -n ${BORG_LOCAL_REPO-} ]] \
+            || err_msg -d 6 "local repo required; set BORG_LOCAL_REPO"
+
+        repo_uri=$( physpath "$BORG_LOCAL_REPO" )
+
+        # confirm repo is initialized
+        local repo_chk
+        repo_chk=$( < "$repo_uri/README" ) \
+            && [[ $repo_chk == *borg* ]] \
+            || err_msg -d 7 "local repo check failed; is '$repo_uri' initialized?"
+
+        vrb_msg 2 "using local repo: '${repo_uri}'"
+
+    else
+        # use BORG_REPO
+        [[ -n ${BORG_REPO-} ]] || ( exit 4 )
+        repo_uri=::
+    fi
+
+    # ensure logging is set up
+    [[ -n ${BORG_LOGGING_CONF-} ]] || ( exit 5 )
+
+    logging_dir=$BORG_CONFIG_DIR/log
+    [[ -d $logging_dir ]] \
+        || /bin/mkdir -p "$logging_dir"
+
+    if [[ -v _dryrun ]]
+    then
+        # - use a separate log file on dry-runs, and overwrite every time
+        # - e.g. borg_logging.conf becomes borg_logging-dryrun.conf
+        BORG_LOGGING_CONF=${BORG_LOGGING_CONF/%.conf/-dryrun.conf}
+        log_fn=$logging_dir/borg_dryrun_log
+        vrb_msg 2 "using dry-run log: '${log_fn}'"
+
+    elif [[ -v _local ]]
+    then
+        # - similarly for --local runs
+        BORG_LOGGING_CONF=${BORG_LOGGING_CONF/%.conf/-local.conf}
+        log_fn=$logging_dir/borg_local_log
+        vrb_msg 2 "using local log: '${log_fn}'"
+
+    else
+        # - borg should append for this session, per borg_logging.conf, but bg_create
+        #   does rotate the log files
+        log_fn=$logging_dir/borg_log
+    fi
+    command touch "$log_fn"
+
+    # mount repo if needed (erikson, mendeleev)
+    if [[ -v BORG_MNT_REQD ]] && (( BORG_MNT_REQD ))
+    then
+        err_msg -d i "Mounting backup repo"
+        bgo_scr_run bgo_check_mount
+    fi
+
+    # otherwise, check that ssh connection is possible
+    if [[ -v BORG_REPO && ${BORG_REPO:0:6} == "ssh://" ]]
+    then
+        _rem=${BORG_REPO:6}
+        _rem=${_rem%%/*}        # e.g. user@host
+        command ssh "$_rem" true
+    fi
+}
+
+_bg_post-run() {
+
+    if [[ -v BORG_MNT_REQD ]] && (( BORG_MNT_REQD ))
+    then
+        # unmount
+        err_msg -d i "Unmounting backup repo"
+        bgo_scr_run bgo_check_mount -u
+    fi
+
+    if (( running_user == 0 ))
+    then
+        # chown log files owned by root to user login name
+        # - e.g. borg_log, borg_log.0, borg_local_log, borg_log_chfile_sizes
+        # - should only be necessary for newly created files
+        # - lognm, lognm_group, etc. are set in bgo_env_setup
+        "$find_cmd" "$logging_dir" \
+            \( \
+                -name 'borg_*log*' \
+                -o -name 'borg-go_*_out' \
+            \) \
+            -user "$( command id -un 0 )" \
+            -exec "$chown_cmd" "$lognm":"$lognm_group" '{}' \;
+    fi
+
+    local post_msg="borg-go done"
+
+    [[ -v cre_rc ]] && {
+        (( cre_rc )) \
+            && post_msg+=" (create status: $cre_rc)" \
+            || post_msg+=" (create status: success)"
     }
 
-    # chown log files owned by root to user login name, if running under sudo
-    # - should only be necessary for newly created files
-    def_lognm    # from bgo_functions: sets lognm, lognm_group, lognm_home
+    [[ -v chk_rc ]] && {
+        (( chk_rc )) \
+            && post_msg+=" (check status: $chk_rc)" \
+            || post_msg+=" (check status: success)"
+    }
 
-    command find "$BORG_CONFIG_DIR" \
-        \( \
-            -name 'borg_log.txt*' \
-            -o -name 'borg_dryrun_log.txt' \
-            -o -name 'borg_log_chfile*.txt' \
-            -o -name 'borg_log_*-stats.txt' \
-            -o -name 'borg-go_[ls]*d_out.txt*' \
-        \) \
-        -user "$( id -un 0 )" \
-        -exec chown "$lognm":"$lognm_group" '{}' \;
-
-    print_msg "borg-go done."
+    err_msg -d i "$post_msg"
 }
 
+bg_list() {
 
-bg_create() (
-
-    ### --- Create Backup Archive ---
-    # Backup e.g. system config and user files into an archive named after this machine
-    local ping_msg
-
-    print_msg "Starting backup ..."
-    "${src_dir}"/bgo_ping_hc.sh start -m "borg${dry_run:+" ${dry_run}"} cmds: ${cmd_array[*]}"
-
-    print_msg "- running pre-backup script"
-    "${src_dir}"/bgo_prep_backup.sh
-
-    if [[ -n ${dry_run-} ]]
+    # check for list
+    if array_match cmd_array list
     then
-        # dry-run affects item flags in log
-        filters='x-'
-    else
-        filters='AMCE'
-    fi
+        [[ ${#cmd_array[*]} == 1 ]] \
+            || err_msg -d w "ignoring commands other than list"
 
-    # include all patterns and recursion roots files in alphanum order
-    # - NB, nullglob is in effect
-    local bc_pats=() rec_roots=()
+        [[ -v 'cmd_args[*]' ]] \
+            || cmd_args=( --consider-checkpoints --last=10 "$repo_uri" )
 
-    for fn in "$BORG_CONFIG_DIR"/borg_{recursion_roots,patterns}*.txt
-    do
-        [[ -s $fn ]] \
-            && bc_pats+=( --patterns-from "$fn" )
+        vrb_msg 2 "running list ${cmd_args[*]}"
 
-        # report the recursion roots in effect
-        mapfile -t -O"${#rec_roots[*]}" rec_roots < \
-            <( command grep -hE '^R ' "$fn" || true )
-    done
-
-    if (( ${#bc_pats[*]} == 0 ))
-    then
-        raise 2 "Empty patterns and recursion roots (bc_pats)."
-
-    elif (( ${#rec_roots[*]} == 0 ))
-    then
-        raise 3 "No recursion roots found in pattern files"
-    fi
-
-    if [[ -z ${dry_run-} ]]
-    then
-        rotate_logs
-    fi
-
-    # Borg call
-    print_msg "- calling borg create${dry_run:+" ${dry_run}"} with recursion roots:"
-    printf >&2 '    '
-    printf >&2 '%s,  ' "${rec_roots[@]:0:${#rec_roots[*]}-1}"
-    printf >&2 '%s\n' "${rec_roots[@]:(-1)}"
-
-    # - add -p for progress
-    # - compression is lz4 by default
-    # - using || to catch exit code 1, which borg uses for warnings
-    #   note handle_borg_ec might add a warning to ping_msg
-
-    bc_opts=( ${dry_run-} )
-    bc_opts+=( --list --filter "$filters" --stats )               # list items backed up matching filters, and show stats
-    bc_opts+=( --info --show-rc )                                 # be verbose, log borg's return code
-    bc_opts+=( --exclude-caches --exclude-if-present .nobackup )  # exclude dirs containing CACHEDIR.TAG or .nobackup
-    bc_opts+=( --one-file-system )                                # do not backup mount-points
-
-    borg create "${bc_opts[@]}" "${bc_pats[@]}" ::'{hostname}-{now:%Y-%m-%dT%H.%M.%S}'  \
-        || handle_borg_ec $?
-
-
-    if [[ -n ${dry_run-} ]]
-    then
-        # stats and changed files only supported without dry-run
-        ping_msg+="no stats from create --dry-run"
-
-    else
-        # record file sizes for backed-up files
-        print_msg "- recording sizes of changed files"
-        "${src_dir}"/bgo_chfile_sizes.sh
-
-        # set aside stats block from log to prevent overwriting
-        bc_stats_fn="$logging_dir/borg_log_create-stats.txt"
-        grep -B 6 -A 10 'INFO Duration' "$log_fn" > "$bc_stats_fn.new"
-
-        if [[ $(grep -c '^' "$bc_stats_fn.new") -eq 17 ]]
-        then
-            print_msg "- recording stats block"
-            /bin/mv -f "$bc_stats_fn.new" "$bc_stats_fn"
-            ping_msg+="borg-create stats:"$'\n'
-            ping_msg+=$(< "$bc_stats_fn")
-
-        else
-            ping_msg+="borg-create stats block from log not as expected: $bc_stats_fn.new"
-            print_msg WARNING "$ping_msg"
-        fi
-    fi
-
-    # signal successful backup
-    "${src_dir}"/bgo_ping_hc.sh success -m "$ping_msg"
-)
-
-run_prune() {
-
-    ### --- Prune Backup Archives ---
-    # Remove old backups according to schedule
-    local ping_msg
-
-    print_msg "Starting prune ..."
-
-    # borg command
-    print_msg "- calling borg prune${dry_run:+" ${dry_run}"}"
-    # - The '{hostname}-' prefix limits the prune operation to the archives associated
-    #   with the present machine.
-    # - N.B. the keep rules do not operate exactly as you may expect, because intervals
-    #   in which there are no backups are not counted. E.g., if you only did 7 backups
-    #   in the last year, and they were all on different days, then --keep-daily 7 would
-    #   keep all those backups for the last year, not just the ones in the past week.
-    #   Or, e.g. if you only backup daily, and use --keep-hourly 24, the last 24 days of
-    #   backups will be kept. The keep-within rules are more like this, but not
-    #   exactly...
-    # - From the docs:
-    #     + The --keep-within option takes an argument of the form “<int><char>”, where
-    #       char is “H”, “d”, “w”, “m”, “y”. For example, --keep-within 2d means to keep
-    #       all archives that were created within the past 48 hours.
-    #     + The archives kept with this option do not count towards the totals specified
-    #       by any other options.
-    #     + E.g., --keep-daily 7 means to keep the latest backup on each day, up to 7
-    #       most recent days with backups (days without backups do not count).
-    # - If any rule is not fully satisfied, the earliest backup is retained.
-    # - Weeks go from Monday to Sunday, so weekly backups may keep e.g. a Tuesday and a
-    #   Sunday archive if that's all it has to choose from.
-    # - See the docs for examples, but the finer details probably don't matter to us:
-    #   https://borgbackup.readthedocs.io/en/stable/usage/prune.html
-    # - The following options should keep every archive within the last 14 days, and
-    #   weekly archives for 2 weeks that have a backup before that, then similarly for 6
-    #   monthly archives, and 3 yearly archives.
-
-    borg prune ${dry_run-} --list --stats -a '{hostname}-*' \
-               --keep-within 14d                            \
-               --keep-weekly 2                              \
-               --keep-monthly 6                             \
-               --keep-yearly 3                              \
-               --info --show-rc ::
-
-    if [[ -n ${dry_run-} ]]
-    then
-        # stats only supported without dry-run
-        ping_msg="no stats from prune --dry-run"$'\n'
-
-    else
-        # set aside stats block from log to prevent overwriting
-        bp_stats_fn="$logging_dir/borg_log_prune-stats.txt"
-        grep -B 2 -A 5 'INFO Deleted data' "$log_fn" > "${bp_stats_fn}.new"
-
-        if [[ $(grep -c '^' "${bp_stats_fn}.new") -eq 8 ]]
-        then
-            print_msg "- recording stats block"
-            /bin/mv -f "${bp_stats_fn}.new" "$bp_stats_fn"
-            ping_msg="borg-prune stats:"$'\n'
-            ping_msg+=$(< "$bp_stats_fn")
-        else
-            ping_msg="borg-prune stats block from log not as expected:"$'\n'
-            ping_msg+="$bp_stats_fn.new"$'\n'
-            print_msg WARNING "$ping_msg"
-        fi
-    fi
-
-    # signal successful prune
-    "${src_dir}"/bgo_ping_hc.sh success -m "$ping_msg"
-}
-
-run_check() {
-
-    ### --- Check Repo and Archive(s) ---
-    # Examine backup repo and most recent archive to ensure validity
-    print_msg "Starting check ..."
-
-    borg check \
-        --last 1 -a '{hostname}-*' \
-        --info --show-rc ::
-    # --progress ?
-}
-
-run_compact() {
-
-    ### --- Compact Repo ---
-    # actually free repo disk space by compacting segments
-    # - this is most useful after delete and prune operations
-    print_msg "Starting compact ..."
-
-    borg compact \
-        --threshold 1 \
-        --info --show-rc ::
-}
-
-rotate_logs() {
-
-    # Rotate log file
-    if [[ -n $(command -v savelog) ]]
-    then
-        # use savelog to rotate 7 files, compress, preserve perms, and touch new
-        savelog -c 7 -ntp "$log_fn"
-    else
-        _rotate_one() {
-            local -i i=$1
-            local -i j=i+1
-
-            # check log file exists with non-zero size
-            if [[ -s ${log_fn}.$i ]]
-            then
-                /bin/mv -f "${log_fn}.$i" "${log_fn}.$j" && {
-                    gzip -f "${log_fn}.$j"
-                }
-
-            elif [[ -s ${log_fn}.$i.gz ]]
-            then
-                /bin/mv -f "${log_fn}.$i.gz" "${log_fn}.$j.gz"
-            else
-                return 0
-            fi
-        }
-
-        # move older files, starting with the oldest
-        local -i k
-        for k in 6 5 4 3 2 1 0
-        do
-            _rotate_one $k
-        done
-
-        # move most recent file to .0
-        # - use cp to preserve ownership and file mode of log_fn
-        [[ -s $log_fn ]] && /bin/cp -pf "$log_fn" "${log_fn}.0"
-
-        printf '' > "$log_fn"
+        BORG_LOGGING_CONF='' "$borg_cmd" list "${cmd_args[@]}"
+        exit
     fi
 }
 
-handle_borg_ec() {
+bgo_scr_run() {
 
-    # Handle non-zero exit codes from borg
-    # - borg exits with ec=1 or 100-127 for warnings, which shouldn't
-    #   bring down the whole script, but should be reported
-    local -i ec=$1
+    # usage:
+    #   bgo_scr_run bgo_ping_hc success ...
+    #   bgo_scr_run --check bgo_prep_backupdir
+
+    # NB, for a function, just use:
+    # import_func -l funcname
+
+    local _chk
+    [[ $1 == --check ]] \
+        && { _chk=1; shift; }
+
+    local scr_name=${src_dir}/${1}.sh
     shift
 
-    if (( ec == 1 || ( ec > 99 && ec < 128 ) ))
-    then
-        # relay borg warning
-        ping_msg="${FUNCNAME[1]}(): borg exited with code $ec; WARNINGs from borg_log.txt:"$'\n'
-        ping_msg+=$( command grep WARNING "$log_fn" )$'\n'
-        print_msg WARNING "$ping_msg"
+    [[ -x $scr_name ]] \
+        || { err_msg -d 9 "no executable found at ${scr_name}"; return; }
 
+    if [[ -v _chk ]]
+    then
+        return 0
     else
-        # trigger the trap error handling
-        ( exit $ec )
+        "$scr_name" "$@" \
+            || return
     fi
 }
 
 
-# Now that functions are defined, run main()
-main
+# dependencies
+_deps=( docsh err_msg vrb_msg physpath array_match run_vrb ignore_sigpipe )
+
+if [[ $0 == "${BASH_SOURCE[0]}" ]]
+then
+    # Script was executed, not sourced
+    trap 'exit' ERR
+
+    # import dependencies
+    # - import_func.sh should be symlinked somewhere on the PATH
+    source import_func.sh
+    import_func "${_deps[@]}"
+    unset _deps
+
+    # call main func
+    # - NB, running as a_func || exit will *disable* any ERR trap set in a_func
+    borg-go "$@"
+
+else
+    # This file is being sourced
+    # - import_func should already be in the environment
+    trap 'return' ERR
+
+    import_func "${_deps[@]}"
+    unset _deps
+fi
+
