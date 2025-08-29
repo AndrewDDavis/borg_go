@@ -33,7 +33,7 @@ EOF
 set -eE
 
 src_dir=$(python3 -c "import os; print(os.path.dirname(os.path.realpath('${BASH_SOURCE[0]}')))")
-source "$src_dir/bgo_functions.sh"
+source "$src_dir/bgo_env_setup.sh"
 
 
 # Default parameter values
@@ -43,15 +43,15 @@ borg_config_repo="../../Sync/Config/borg"
 
 maybe=''
 
-[[ -n ${BORG_CONFIG_DIR:-} ]] || raise 2 "BORG_CONFIG_DIR not set"
-
-def_mach_id     # mach_name and mach_os from bgo_functions
+[[ -n ${BORG_CONFIG_DIR:-} ]] \
+    || { err_msg -d 2 "BORG_CONFIG_DIR not set"; exit; }
 
 
 # Parse arguments
 function arg_reqd {
     # confirm OPTARG got a non-null value
-    [[ -n ${OPTARG-} ]] || raise 2 "Argument required for --$OPT"
+    [[ -n ${OPTARG-} ]] \
+        || { err_msg -d 2 "Argument required for --$OPT"; exit; }
 }
 
 while getopts 'nb:c:s:m:o:-:' OPT
@@ -65,17 +65,35 @@ do
     fi
 
     case $OPT in
-        b | bin_dir ) arg_reqd && bin_dir=$OPTARG ;;
-    c | config_repo ) arg_reqd && borg_config_repo=$OPTARG ;;
-    s | script_repo ) arg_reqd && borg_scripts_repo=$OPTARG ;;
-      m | mach_name ) arg_reqd && mach_name=$OPTARG ;;
-        o | mach_os ) arg_reqd && mach_os=$OPTARG ;;
-        n | dry-run ) maybe=echo\ would\ ;;
-                ??* ) raise 2 "Unknown option --$OPT" ;;
-                  ? ) exit 2 ;;  # bad short option (error reported via getopts)
+        ( b | bin_dir )
+            arg_reqd && bin_dir=$OPTARG
+        ;;
+        ( c | config_repo )
+            arg_reqd && borg_config_repo=$OPTARG
+        ;;
+        ( s | script_repo )
+            arg_reqd && borg_scripts_repo=$OPTARG
+        ;;
+        ( m | mach_name )
+            arg_reqd && mach_name=$OPTARG
+        ;;
+        ( o | mach_os )
+            arg_reqd && mach_os=$OPTARG
+        ;;
+        ( n | dry-run )
+            maybe='echo would '
+        ;;
+        ( ??* )
+            err_msg -d 2 "Unknown option --$OPT"
+            exit
+        ;;
+        ( '?' )
+            # bad short option (error reported via getopts)
+            exit 2
+        ;;
     esac
 done
-shift $((OPTIND-1))  # remove parsed options and args
+shift $(( OPTIND-1 ))  # remove parsed options and args
 
 
 echo "Setting up and making links..."
@@ -83,14 +101,17 @@ ${maybe}set -vx  # verbose output of shell commands
 
 # Link scripts
 # - working in ~/.local/bin/ by default
-[[ -d $bin_dir ]] || ${maybe}/bin/mkdir -p "$bin_dir"
+[[ -d $bin_dir ]] \
+    || ${maybe}/bin/mkdir -p "$bin_dir"
 cd "$bin_dir"
 
-[[ -d $borg_scripts_repo ]] || raise 2 "borg_scripts_repo not found: '$borg_scripts_repo'"
+[[ -d $borg_scripts_repo ]] \
+    || { err_msg -d 2 "borg_scripts_repo not found: '$borg_scripts_repo'"; exit; }
 ${maybe}ln -sf "$borg_scripts_repo/borg-go.sh" borg-go
 
 # check to make sure scripts are on PATH
-[[ -n $(command -v borg-go) ]] || ${maybe}raise 2 "borg-go not on path"
+[[ -n $( command -v borg-go ) ]] \
+    || { [[ -n ${maybe} ]] || { err_msg -d 2 "borg-go not on path"; exit; }; }
 
 
 # Create symlinks
@@ -99,11 +120,13 @@ ${maybe}ln -sf "$borg_scripts_repo/borg-go.sh" borg-go
 
 # Link config files
 # - work in config dir, usually ~/.config/borg/
-[[ -d $BORG_CONFIG_DIR ]] || ${maybe}/bin/mkdir -p "$BORG_CONFIG_DIR"
+[[ -d $BORG_CONFIG_DIR ]] \
+    || ${maybe}/bin/mkdir -p "$BORG_CONFIG_DIR"
 cd "$BORG_CONFIG_DIR"
 
 # - linking from repo dir
-[[ -d $borg_config_repo ]] || raise 2 "borg_config_repo not found: '$borg_config_repo'"
+[[ -d $borg_config_repo ]] \
+    || { err_msg -d 2 "borg_config_repo not found: '$borg_config_repo'"; exit; }
 
 
 _chk_lnk_cnf() {
@@ -119,7 +142,8 @@ _chk_lnk_cnf() {
 
 
 # Healthchecks UUID is always unique to the machine
-_chk_lnk_cnf "$borg_config_repo/healthchecks_UUID-${mach_name}.txt"  healthchecks_UUID.txt
+# - mach_name and mach_os are set in bgo_env_setup
+_chk_lnk_cnf "$borg_config_repo/healthchecks_UUID-${mach_name}"  healthchecks_UUID
 
 # The logging.conf file is a single file identified by BORG_LOGGING_CONF
 log_fn=$borg_config_repo/borg_logging-${mach_os}_${mach_name}.conf
