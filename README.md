@@ -30,13 +30,14 @@ The following commands become available after installation:
 
 - set env vars BORG_REPO, BORG_CONFIG_DIR, BORG_LOGGING_CONF
 - also set BORG_MNT_REQD=1 if necessary
+- set BORG_LOCAL_REPO if running with `--local`
 - to allow notifications and tracking using healthchecks.io, create the file
   healthchecks_UUID in your BORG_CONFIG_DIR, which should contain the UUID
   of your healthchecks project (see https://healthchecks.io/)
 
 ## Usage
 
-A typical run uses a command such as `sudo borg-go create prune check`. The `compact` command is also supported, and the order of the commands is preserved.
+A typical run uses a command such as `sudo borg-go create prune check`, in which the order of the commands is preserved. The `compact` command is also supported, and is run automatically after a succsessful `prune`. The `list` command may also be used.
 
 Running as the root user (e.g. using `sudo` as above) is generally required when backing up system directories, as some system files can only be read by root. In borg's docs, it is strongly recommended to always access the repository using the same user account to avoid permissions issues in your borg repository or borg cache. For remote repos that are accessed by SSH, it's straightforward to always use the same `ssh user@host` line, regardless of whether you're using sudo. For local repositories, using `user@localhost:/path/to/repo` for BORG_REPO has the same effect, and ensures the same user always accesses the repo.
 
