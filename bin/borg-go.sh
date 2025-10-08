@@ -136,7 +136,7 @@ _bg_args() {
 
     # Parse arguments
     [[ $# -eq 0  || $1 == @(-h|--help|help) ]] \
-        && { docsh -TD; return; }
+        && { docsh -TDf borg-go; exit 0; }
 
     # TODO:
     # - allow chfile_sizes command
