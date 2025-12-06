@@ -58,11 +58,11 @@ elif [[ ! -e ${mnt_pnt}/README ]]; then
         || sshfs_ec=$?
 
     if [[ ${sshfs_ec-} -eq 1 ]]; then
-        echo "ERROR: sshfs exited with code $ec"
+        echo "ERROR: sshfs exited with code $sshfs_ec"
         echo "       possibly requires \`sudo ssh-copy-id $nas_url\`"
         exit 1
     elif [[ ${sshfs_ec-} -gt 1 ]]; then
-        echo "sshfs exited with code $ec, unknown error"
+        echo "sshfs exited with code $sshfs_ec, unknown error"
         exit $sshfs_ec
     else
         true

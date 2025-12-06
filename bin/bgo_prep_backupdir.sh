@@ -117,6 +117,9 @@ then
     if dconf_cmd=$( builtin type -P dconf )
     then
         # back up user gsettings database if available
+        # - if a restore is needed, you can use:
+        #   cp ~/.config/dconf/user /tmp
+        #   XDG_CONFIG_HOME=/tmp dconf dump / > old-gsettings-data.txt
         if (( $( command id -u ) == 0 ))
         then
             sudo -u "$lognm" "$dconf_cmd" dump / > "$bakdir"/dconf-dump_backup.dump

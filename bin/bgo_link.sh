@@ -17,8 +17,8 @@ function print_usage { cat << EOF
 
     Options:
         -b | --bin_dir )      local bin dir (default ~/.local/bin)
-        -c | --config_repo )  borg config repo (default ../../Sync/Config/borg)
-        -s | --script_repo )  borg scripts repo (default ../../Sync/Code/Backup/borg_go/bin)
+        -c | --config_repo )  borg config repo (default ~/Projects/Config-Sync/borg)
+        -s | --script_repo )  borg scripts repo (default ~/Projects/"Shell Operation"/"Bash Library"/modules/borg_go)
         -m | --mach_name )    machine name (default from `hostname -s`)
         -o | --mach_os )      machine OS (default from `uname -s`)
         -n | --dry-run )      show what would be done, don't perform actions
@@ -32,14 +32,14 @@ EOF
 # Configure some common variables, shell options, and functions
 set -eE
 
-src_dir=$(python3 -c "import os; print(os.path.dirname(os.path.realpath('${BASH_SOURCE[0]}')))")
+src_dir=$( python3 -c "import os; print(os.path.dirname(os.path.realpath('${BASH_SOURCE[0]}')))" )
 source "$src_dir/bgo_env_setup.sh"
 
 
 # Default parameter values
 bin_dir=~/.local/bin
-borg_scripts_repo="../../Sync/Code Projects/Backup/borg_go/bin"
-borg_config_repo="../../Sync/Config/borg"
+borg_scripts_repo=~/Projects/"Shell Operation"/"Bash Library"/modules/borg_go
+borg_config_repo=~/Projects/Config-Sync/borg
 
 maybe=''
 
@@ -103,11 +103,13 @@ ${maybe}set -vx  # verbose output of shell commands
 # - working in ~/.local/bin/ by default
 [[ -d $bin_dir ]] \
     || ${maybe}/bin/mkdir -p "$bin_dir"
+
 cd "$bin_dir"
 
-[[ -d $borg_scripts_repo ]] \
-    || { err_msg -d 2 "borg_scripts_repo not found: '$borg_scripts_repo'"; exit; }
-${maybe}ln -sf "$borg_scripts_repo/borg-go.sh" borg-go
+[[ -d ${borg_scripts_repo}/bin ]] \
+    || { err_msg -d 2 "borg_scripts_repo bin dir not found: '${borg_scripts_repo}/bin'"; exit; }
+
+${maybe}ln -sf "$borg_scripts_repo/bin/borg-go.sh" borg-go
 
 # check to make sure scripts are on PATH
 [[ -n $( command -v borg-go ) ]] \
@@ -129,27 +131,29 @@ cd "$BORG_CONFIG_DIR"
     || { err_msg -d 2 "borg_config_repo not found: '$borg_config_repo'"; exit; }
 
 
-_chk_lnk_cnf() {
-    # link file if it exists and is non-empty
+_chk_mk_lnk() {
 
-    [[ -s $1 ]] && {
+    # _chk_mk_lnk <filename> <link>
+    # create symlink if file exists and is non-empty
+    if [[ -s $1 ]]
+    then
         ${maybe}ln -sf "$1" "$2"
         return 0
-    } || {
+    else
         return 1
-    }
+    fi
 }
 
 
 # Healthchecks UUID is always unique to the machine
 # - mach_name and mach_os are set in bgo_env_setup
-_chk_lnk_cnf "$borg_config_repo/healthchecks_UUID-${mach_name}"  healthchecks_UUID
+_chk_mk_lnk "$borg_config_repo/healthchecks_UUID-${mach_name}"  healthchecks_UUID
 
 # The logging.conf file is a single file identified by BORG_LOGGING_CONF
 log_fn=$borg_config_repo/borg_logging-${mach_os}_${mach_name}.conf
 
-_chk_lnk_cnf "$log_fn" borg_logging.conf  || {
-    _chk_lnk_cnf "${log_fn/_${mach_name}/}" borg_logging.conf
+_chk_mk_lnk "$log_fn" logging.conf  || {
+    _chk_mk_lnk "${log_fn/_${mach_name}/}" logging.conf
 }
 
 # Pattern config files may follow OS only, or have additional machine-specific config
@@ -157,14 +161,14 @@ _chk_lnk_cnf "$log_fn" borg_logging.conf  || {
 #   to allow overrides.
 pat_fn=$borg_config_repo/borg_patterns-${mach_os}_${mach_name}.txt
 
-_chk_lnk_cnf  "$pat_fn"                  borg_patterns_0.txt
-_chk_lnk_cnf "${pat_fn/_${mach_name}/}"  borg_patterns_1.txt
+_chk_mk_lnk "$pat_fn" patterns_0
+_chk_mk_lnk "${pat_fn/_${mach_name}/}" patterns_1
 
 
 rec_fn=$borg_config_repo/borg_recursion_roots-${mach_os}_${mach_name}.txt
 
-_chk_lnk_cnf  "$rec_fn"                  borg_recursion_roots_0.txt
-_chk_lnk_cnf "${rec_fn/_${mach_name}/}"  borg_recursion_roots_1.txt
+_chk_mk_lnk "$rec_fn" rec_roots_0
+_chk_mk_lnk "${rec_fn/_${mach_name}/}" rec_roots_1
 
 
 ${maybe}set +vx

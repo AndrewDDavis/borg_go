@@ -53,6 +53,7 @@ def_cmds() {
     find_cmd=$( builtin type -P find )
     grep_cmd=$( builtin type -P grep )
     sed_cmd=$( builtin type -P sed )
+    tail_cmd=$( builtin type -P tail )
 }
 
 def_mach_id() {

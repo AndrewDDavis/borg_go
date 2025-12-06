@@ -34,6 +34,10 @@ bgo_ping_hc() {
     [[ $# -eq 0 || $1 == @(-h|--help) ]] \
         && { docsh -TD; return; }
 
+    # don't ping with --local
+    [[ -v _local ]] \
+        && return 0
+
     while (( $# > 0 ))
     do
         case $1 in
@@ -103,7 +107,7 @@ bgo_ping_hc() {
     # finish up
     if [[ $hc_reponse == OK ]]
     then
-        err_msg -d i "- $hc_cmd signal sent to Healthchecks"
+        err_msg -d i "$hc_cmd signal sent to Healthchecks"
     else
         err_msg -d 9 "Healthchecks response: '$hc_reponse'"
     fi
