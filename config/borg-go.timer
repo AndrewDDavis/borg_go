@@ -1,0 +1,10 @@
+[Unit]
+Description="Borg-go backup trigger (Runs 2x/week)"
+# runs service unit of the same name (borg_go.service) automatically
+
+[Timer]
+# format: Day(s)OfWeek Year-Month-Day H:M:S
+OnCalendar=Sun,Thu *-*-* 00:05:05
+
+[Install]
+WantedBy=timers.target

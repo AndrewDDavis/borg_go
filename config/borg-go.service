@@ -1,0 +1,55 @@
+[Unit]
+Description="Create a Borg-Backup archive using the borg-go configuration"
+
+Wants=network-online.target
+After=network-online.target
+
+
+[Service]
+Type=oneshot
+# RemainAfterExit=yes
+UMask=0027
+
+# PATH and HOME
+Environment='PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+Environment='HOME=/root'
+
+# Borg Env Vars
+# - BORG_LOGGING_CONF should put the logs in ~/.config/borg/log
+Environment='BORG_CONFIG_DIR=/home/andrew/.config/borg'
+Environment='BORG_LOGGING_CONF=/home/andrew/.config/borg/logging.conf'
+Environment='BORG_REPO=ssh://hud@nemo.in.spinup.ca/mnt/backup/borgbackup_swamp-deb_crbook_repo'
+
+StandardOutput=file:/home/andrew/.config/borg/log/borg-go_systemd_out
+StandardError=file:/home/andrew/.config/borg/log/borg-go_systemd_out
+
+# Until recent version, systemd did not truncate its file, and it doesn't respect UMask
+ExecStartPre=/bin/bash -c " \
+	fn=/home/andrew/.config/borg/log/borg-go_systemd_out; \
+	[[ -n $( command -v savelog ) ]] \
+		&& savelog -c 7 -ntp /home/andrew/.config/borg/log/borg-go_systemd_out \
+		|| printf '' > \"$${fn}\"; \
+	chmod o-rw \"$${fn}\" \
+"
+
+# make the borg run easier on resources if there are active processes
+# - see e.g. /etc/cron.daily/plocate:
+#   flock --nonblock /run/plocate.daily.lock $NOCACHE $IONICE nice $UPDATEDB
+#     + flock creates a lock file to prevent conflicting processes.
+#       Use shlock on macOS.
+#     + nocache tries to minimize the effect an application has on the Linux file system
+#       cache. Use case: backup processes that should not interfere with the present state
+#       of the cache.
+#     + ionice: lower priority of disk IO
+#     + nice: lower priority with CPU scheduler
+
+ExecStart=/bin/bash -c " \
+	/bin/flock -n -E 2 /var/lock/borg-go_systemd.lock \
+	$( command -v /bin/nocache ) \
+	ionice -c 2 -n 5 \
+	nice \
+	/usr/local/bin/borg-go create prune \
+"
+
+# Don't need or want an [Install] section, which would start it on boot, just let borg-go.timer activate
+# the job. The job can also be run on demand using `systemctl start borg-go`.

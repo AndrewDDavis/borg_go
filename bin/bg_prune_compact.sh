@@ -46,7 +46,8 @@ bg_prune() {
         # report prune results on dry-run
         # - prevent wrapping for legibility
         # "$grep_cmd" ' (rule: ' "$log_fn"
-        local w=$( tput cols )
+        local w
+        w=$( tput cols ) || w=80
         (( w -= 4 ))
         "$sed_cmd" -E '/ \(rule: / s/^.* INFO (.{'$w'}).*$/\1/' "$log_fn"
 
