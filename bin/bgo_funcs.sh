@@ -152,7 +152,6 @@ _bg_pre-run() {
 
     [[ -e $BORG_LOGGING_CONF ]] ||
         err_msg -d 5 "BORG_LOGGING_CONF file not found: '$BORG_LOGGING_CONF'"
-    command touch "$log_fn"
 
 
     # mount repo if needed (erikson, mendeleev)

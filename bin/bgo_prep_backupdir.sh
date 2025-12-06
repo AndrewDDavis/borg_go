@@ -39,7 +39,11 @@ fi
 
 if [[ -r ${dbfile:-} ]]
 then
-    /bin/cp -p "$dbfile" "$bakdir"
+    if [[ ! -e "$bakdir"/"$(basename "$dbfile")" ]] \
+        || ! cmp -s "$dbfile" "$bakdir"/"$(basename "$dbfile")"
+    then
+        /bin/cp -p "$dbfile" "$bakdir"
+    fi
 fi
 
 
