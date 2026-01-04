@@ -93,30 +93,40 @@ then
     /bin/mkdir -p "$vsc_bakdir"
     for fn in "$lognm_home"/.config/Code/User/{settings.json,keybindings.json,snippets}
     do
-        [[ -r $fn ]] && /bin/cp -pLRf "$fn" "$vsc_bakdir"/
+        [[ -r $fn ]] && /bin/cp -pfLR "$fn" "$vsc_bakdir"/
     done
     unset fn vsc_bakdir
 fi
 
 
 # OS dependent files
-# - mach_name and mach_os come from bgo_env_setup: defines mach_name and mach_os
+# - mach_name and mach_os defined in bgo_env_setup
 if [[ $mach_os == linux ]]
 then
-    # create a list of installed packages from dpkg
-    # - Source for dpkg cmd:
-    #   http://www.webupd8.org/2010/03/2-ways-of-reinstalling-all-of-your.html
-    # - Note, /var/backups contains backups of the dpkg-status file, but that doesn't
-    #   appear to indicate manual vs automatic installations.
-    command dpkg --get-selections > "$bakdir"/dpkg-installed-applications.txt
+    if [[ -n $( command -v dpkg ) ]]
+    then
+        # Debian-based system
+        # create a list of installed packages from dpkg
+        # - Source for dpkg cmd:
+        #   http://www.webupd8.org/2010/03/2-ways-of-reinstalling-all-of-your.html
+        # - Note, /var/backups contains backups of the dpkg-status file, but that doesn't
+        #   appear to indicate manual vs automatic installations.
+        command dpkg --get-selections > "$bakdir"/dpkg-installed-applications.txt
 
-    # specifically note manually installed packages
-    command apt-mark showmanual > "$bakdir"/apt-manual-packages.txt
+        # To restore the dpkg list, use:
+        #  sudo dpkg --set-selections < dpkg-installed-applications.txt
+        #  sudo apt-get -y update
+        #  sudo apt-get dselect-upgrade
 
-    # To restore the dpkg list, use:
-    #  sudo dpkg --set-selections < dpkg-installed-applications.txt
-    #  sudo apt-get -y update
-    #  sudo apt-get dselect-upgrade
+        # specifically note manually installed packages
+        command apt-mark showmanual > "$bakdir"/apt-manual-packages.txt
+
+        # also backup the sources list(s)
+        [[ -r /etc/apt/sources.list ]] \
+            && /bin/cp -pfLR /etc/apt/sources.list "$bakdir"/apt-sources.list
+        [[ -d /etc/apt/sources.list.d ]] \
+            && /bin/cp -pfLR /etc/apt/sources.list.d "$bakdir"/apt-sources.list.d
+    fi
 
     if dconf_cmd=$( builtin type -P dconf )
     then
