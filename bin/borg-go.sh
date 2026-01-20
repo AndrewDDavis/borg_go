@@ -1,96 +1,99 @@
 #!/usr/bin/env bash
 
-# This is borg-go, the main script to call borg using typical settings for this
-# system.
-#
-# Inspired by the script in the official docs:
-#   https://borgbackup.readthedocs.io/en/stable/quickstart.html#automating-backups
-#
-# by Andrew Davis (addavis@gmail.com)
-# v0.3 (Aug 2025)
-
-: """Run Borg-Backup with a static configuration to create, check, and modify backups
+: """Run Borg-Backup with a static configuration
 
     Usage
 
         borg-go [options] <command> [cmd-args] [command ...]
 
+    Borg-go calls the borg command to create, check, and modify backups using the
+    typical settings for the present system. For instructions on setting up the
+    configuration, refer to the README file.
+
+    Examples
+
+        borg-go create prune check
+        borg-go --local create ~/./Documents
+        borg-go --local list
+        borg-go --local check --repair
+
     Commands
 
-      create
+      create [path ...]
       : Create a new backup archive in the default repository.
 
-        If paths are given after the create command (and before another command), they
-        will be used as the recursion roots for the backup, instead of those configured
-        in 'rec_roots' config files. Consider using the borg slashdot notation for more
-        concise and portable paths within the repo, e.g. /home/user/./Documents.
+        If paths are given after the create command (and before another command),
+        they will be used as the recursion roots for the backup, instead of those
+        configured in 'rec_roots' config files. Consider using the borg slashdot
+        notation for more concise and portable paths within the repo, as in
+        the example above.
 
-        Pattern config files are still used to exclude unwanted files such as cache
-        directories. This only works as intended when the recursion roots are in
-        separate files from the other patterns.
+        Pattern config files are still used to exclude unwanted files such as
+        cache directories. This only works as intended when the recursion roots
+        are in separate files from the other patterns.
 
       prune
       : Remove old archives according to the configured rules.
 
       check
-      : Check integrity of the repo and latest archive.
+      : Check integrity of the repo and the latest archive.
 
-        The default options for check are --last 1 -a '{hostname}-*'. Use option --all
-        to check all archives instead. Additional selections may be made along with
-        --all using the command arguments.
+        The default options for check are --last 1 -a '{hostname}-*'. Use option
+        --all to check all archives instead. Additional selections may be made
+        along with --all using the command arguments.
 
       compact
-      : Save space in repo; runs automatically after prune
+      : Reclaim space in the repo. This runs automatically after prune.
 
       list [args]
-      : List recent backup archives, or contents of a specified archive. Arguments may
-        be supplied to provide options to the list command, or specify a repository or
-        a particular archive to list. By default, the options --consider-checkpoints and
-        --last=10 are used, and the default repository is listed unless the --local
-        option was used. No other commands may be used with list.
+      : List recent backup archives, or contents of a specified archive. Arguments
+        may be supplied to provide options to the list command, or specify a
+        repository or a particular archive to list. By default, the options
+        --consider-checkpoints and --last=10 are used, and the default repository
+        is listed unless the --local option was used. No other commands may be
+        used with list.
 
       log
-      : Show the most recent log file using less. Respects --dry-run and --local. No
-        other commands may be used with log.
+      : Show the most recent log file using less. Respects --dry-run and --local.
+        No other commands may be used with log.
 
     Options
 
       --local
-      : Backup to a local repo (e.g., a repo on another disk in the present machine).
-        This is indended to be used when the regular repo is not available. Set the
-        BORG_LOCAL_REPO environment variable to the path of the local repo. In this
-        mode, a separate log file is used, and borg-go does not enforce running as root.
+      : Backup to an alternative repo, e.g. a repo on a local disk. This is
+        indended to be used when the regular repo is not available, or for quick,
+        one-off backups.
 
-        It is common to use paths with create --local, but if no paths are given, the
-        default recursion roots are used to create a full backup to the local repo.
+        To use this option, set the BORG_LOCAL_REPO environment variable to the
+        path of the alternative repo. In this mode, a separate log file is used,
+        and borg-go does not enforce running as root.
+
+        It is common to supply paths to the create command when running in local
+        mode, as in the example below. If no paths are given, the configured
+        recursion roots are used to create a full backup to the local repo.
 
       -n, --dry-run
-      : Run create and/or prune without changing the repo, to see what would be backed
-        up or removed. The check and compact commands are not affected by the dry-run
-        option, but compact will not run automatically after prune on a dry-run. This
-        option also increases verbosity as in -v.
+      : Run create and/or prune without changing the repo, to see what would be
+        backed up or removed. The check and compact commands are not affected by
+        the dry-run option, but compact will not run automatically after prune on
+        a dry-run. This option also increases verbosity as in -v.
 
       -v, --verbose
       : Increase verbosity level of borg-go. Borg itself runs with --info verbosity.
-
-    Examples
-
-        borg-go create prune check
-        borg-go --local ~/./Documents create
-        borg-go --local list
-        borg-go --local check --repair
-
-    For config and setup, refer to the README.md file.
 """
 
 borg-go() {
 
-    # setup the environment: shell options, umask, traps, variables for mach_os, lognm,
-    # borg_cmd, etc.
-    # - ERR trap will cause exit for non-zero return statuses in this function
+    # setup the environment:
+    # - shell options, umask, variables for mach_os, lognm, etc., via the
+    #   bgo_env_setup.sh script
+    # - ERR trap would cause exit for non-zero return statuses in this function,
+    #   if errtrace was set...
+    # - also import required functions such as _bg_args, bg_create, etc.
     _bg_setup
 
-    # handle args; keep track of create/prune/check to preserve order
+    # handle args
+    # - keep track of create/prune/check to preserve order
     local cmd_array=() bgl_args=() cre_args=() pru_args=() chk_args=() com_args=() \
         _dryrun _local _chk_all rr_paths=()
     _bg_args "$@"
