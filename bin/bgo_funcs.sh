@@ -162,10 +162,24 @@ _bg_pre-run() {
     fi
 
     # otherwise, check that ssh connection is possible
-    if [[ -v BORG_REPO && ${BORG_REPO:0:6} == "ssh://" ]]
+    if [[ -v BORG_REPO && $BORG_REPO == *@* ]]
     then
-        _rem=${BORG_REPO:6}
-        _rem=${_rem%%/*}        # e.g. user@host
+        # trim to [ssh://]user@host[:port]
+        local _rem
+        if [[ $BORG_REPO == 'ssh://'* ]]
+        then
+            # colon, if present, must be followed by port, and path must start with '/'
+            # e.g. BORG_REPO=ssh://user@host:22/path/to/repo,
+            #      BORG_REPO=ssh://user@host/path/to/repo,
+            _rem=${BORG_REPO#'ssh://'}
+            _rem='ssh://'${_rem%%/*}
+        else
+            # no port, anything following ':' is path, which may be relative
+            # e.g. BORG_REPO=user@host:/path/to/repo,
+            #      BORG_REPO=user@host:path/to/repo (relative path, only valid without ssh://)
+            _rem=${BORG_REPO%%:*}
+        fi
+        vrb_msg 2 "confirming SSH connection to $_rem"
         command ssh "$_rem" true
     fi
 }
