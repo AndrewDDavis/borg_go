@@ -119,10 +119,8 @@ bgo_chfile_sizes() {
     # sed prepends spaces to each line; head sends sigpipe to sort (can cause exit 141)
     err_msg -d i "Largest 12:"
 
-    # NB, GNU sort will complain when its stdin is closed, but instead of
-    # exiting with code 141 (pipefail), it exits 2 for any error.
-    {   command sort -rh "$du_out_fn" 2>/dev/null \
-            | "$sed_cmd" 's/^/    /; 12 q'
-
-    } || ignore_sigpipe $? 2
+    # NB, GNU sort will complain when its stdin is closed, but doesn't exit with
+    # code 141 (pipefail); it may exit with code 1 or 2... Using process
+    # substitution prevents the error code from taking down the script
+    "$sed_cmd" 's/^/    /; 12 q' <( command sort -rh "$du_out_fn" 2>/dev/null )
 }
