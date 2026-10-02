@@ -2,7 +2,7 @@
 
 _bg_args() {
 
-    # Parse arguments
+    # Parse arguments to the borg-go command call
     [[ $# -eq 0  || $1 == @(-h|--help|help) ]] \
         && { docsh -TDf borg-go; exit 0; }
 
@@ -15,7 +15,7 @@ _bg_args() {
             ( create | prune | check | compact )
                 cmd_array+=( "$1" )
             ;;
-            ( list | log )
+            ( list | log | status )
                 cmd_array+=( "$1" )
                 bgl_args=( "${@:2}" )
                 shift $#
@@ -39,7 +39,7 @@ _bg_args() {
                     && err_msg -d 3 "No command, but received argument '$1'"
 
                 case ${cmd_array[-1]} in
-                    (create)
+                    ( create )
                         if [[ $1 == -* ]]
                         then
                             cre_args+=( "$1" )
@@ -48,9 +48,9 @@ _bg_args() {
                             rr_paths+=( "$1" )
                         fi
                         ;;
-                    (prune)   pru_args+=( "$1" ) ;;
-                    (check)   chk_args+=( "$1" ) ;;
-                    (compact) com_args+=( "$1" ) ;;
+                    ( prune )   pru_args+=( "$1" ) ;;
+                    ( check )   chk_args+=( "$1" ) ;;
+                    ( compact ) com_args+=( "$1" ) ;;
                 esac
             ;;
         esac
@@ -279,5 +279,16 @@ handle_borg_ec() {
     else
         # trigger the ERR trap
         return $ec
+    fi
+}
+
+_ev_msg() {
+
+    # Call err_msg -d or vrb_msg, depending on whether the STDERR is attached
+    # to a terminal.
+    # - NB, test -t <fd> is True if file descriptor fd is open and refers to a terminal
+    if test -t 2
+    then
+        true
     fi
 }

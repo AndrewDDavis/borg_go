@@ -7,6 +7,7 @@ Description="Borg-go backup trigger"
 #OnCalendar=Sun,Thu *-*-* 00:05:05
 # run every day
 OnCalendar=* *-*-* 00:05:05
+Persistent=true
 
 [Install]
 WantedBy=timers.target

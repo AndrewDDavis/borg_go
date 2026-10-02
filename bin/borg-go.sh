@@ -17,7 +17,7 @@
         borg-go --local list
         borg-go --local check --repair
 
-    Commands
+    Main Commands
 
       create [path ...]
       : Create a new backup archive in the default repository.
@@ -33,7 +33,8 @@
         are in separate files from the other patterns.
 
       prune
-      : Remove old archives according to the configured rules.
+      : Remove old archives according to the configured rules. The compact action
+        runs automatically after prune.
 
       check
       : Check integrity of the repo and the latest archive.
@@ -45,17 +46,28 @@
       compact
       : Reclaim space in the repo. This runs automatically after prune.
 
-      list [args]
-      : List recent backup archives, or contents of a specified archive. Arguments
-        may be supplied to provide options to the list command, or specify a
-        repository or a particular archive to list. By default, the options
-        --consider-checkpoints and --last=10 are used, and the default repository
-        is listed unless the --local option was used. No other commands may be
-        used with list.
+    Other Commands
 
-      log
-      : Show the most recent log file using less. Respects --dry-run and --local.
-        No other commands may be used with log.
+    These commands are meant to be called interactively as standalone actions.
+    Only one of these may be called on a single command line.
+
+      list [args]
+      : List recent backup archives, or contents of a specified archive. Any
+        arguments are applied to the 'borg list' command. These may be options,
+        or you may specify a repository or a particular archive. By default, the
+        options --consider-checkpoints and --last=10 are used, and the default
+        repository is listed unless the --local option was used.
+
+      log [args]
+      : Show the most recent log file using the 'less' command. Any options are
+        applied to the less command line. This action respects --dry-run and
+        --local.
+
+      status
+      : Check the active and failed states of borg-go.service and its timer.
+        Typically, borg-go.service is inactive but the timer is active. Show
+        the result of 'systemctl status' on the service and timer.The \"Trigger\"
+        line of the timer output shows time until the next run of the service.
 
     Options
 
@@ -104,8 +116,8 @@ borg-go() {
     _bg_pre-run
 
     # check for list or log command
-    bg_list && exit
-    bg_log && exit
+    bg_list_log_status \
+        && exit
 
     # Main ops
     local cmd cre_rc chk_rc
@@ -150,13 +162,13 @@ _bg_setup() {
     #   setting up sudoers, or running from launchd/systemd/cron.
     # - However, we should still be able to find the supporting scripts in src_dir.
     # - Thus, borg-go should run fine as e.g. `sudo $(which borg-go)`.
-    import_func -l _bg_args
+    import_func -l _bg_args  # and _bg_pre-run, _bg_post-run, bgo_scr_run, handle_borg_ec, ev_msg
     import_func -l bgo_chfile_sizes
     import_func -l bgo_ping_hc
     import_func -l bg_create
     import_func -l bg_prune
     import_func -l bg_check
-    import_func -l bg_list
+    import_func -l bg_list_log_status
     bgo_scr_run --check bgo_prep_backupdir
 }
 

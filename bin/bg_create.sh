@@ -19,12 +19,13 @@ bg_create() {
         cre_rc=0
     fi
 
-    # assemble and run the borg-create command line
-    # - using || to catch borg warning exit codes
-    # - NB, handle_borg_ec might add a warning to hc_msg
+    # assemble the borg-create command line
     local bc_args=()
     _bgc_args
 
+    # run borg-create
+    # - using || to catch borg warning exit codes
+    # - NB, handle_borg_ec might add a warning to hc_msg
     local hc_msg
     run_vrb "$borg_cmd" create "${bc_args[@]}" \
         || handle_borg_ec $?
@@ -89,10 +90,11 @@ _bgc_opts() {
     trap 'return' ERR
     trap 'trap - return err' RETURN
 
-    # - show stats and list items backed up
-    bc_opts=( "${_dryrun:---stats}" --list )
+    # - show stats, if it's not a dry run
+    bc_opts=( "${_dryrun:---stats}" )
 
-    # - only log items with the some status chars
+    # - list items that are backed up
+    bc_opts+=( --list )
     # - A = new file added, M = modified file, C = file changed during backup, E = read error
     # - NB, AME don't apply to dry-run, only x (excluded) and - (dry-run) are respected
     # - refer: https://borgbackup.readthedocs.io/en/stable/usage/create.html#item-flags
