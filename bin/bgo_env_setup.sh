@@ -22,18 +22,21 @@ umask 027
 
 # Handle interrupt and exceptions, giving useful debugging output
 trap -- '
-    err_msg -d 2 "${exc_fn--} was interrupted${FUNCNAME[0]:+ (function ${FUNCNAME[0]})}"
+    el_msg 2 "${exc_fn--} was interrupted${FUNCNAME[0]:+ (function ${FUNCNAME[0]})}"
     exit
 ' INT TERM
 
 trap -- '
     ec=$?
-    ping_msg="$( date +"%F %T %Z" ) Exception code $ec in $( basename -- ${BASH_SOURCE[0]} ) script at line $((LINENO-2))${FUNCNAME[0]:+ (function stack: ${FUNCNAME[@]})}"
+    exit_msg="Exception code $ec in $( basename -- ${BASH_SOURCE[0]} ) script at line $((LINENO-2))${FUNCNAME[0]:+ (function stack: ${FUNCNAME[@]})}"
 
     [[ $0 == borg-go?(.sh) ]] \
-        && bgo_ping_hc failure -m "$ping_msg"
+        && bgo_ping_hc failure -m "$( date +"%F %T %Z" ) ${exit_msg}"
 
-    printf "%s\n" "${ping_msg}; exiting..."
+    test -t 2 \
+        || exit_msg="$( date +"%F %T %Z" ) ${exit_msg}"
+
+    printf >&2 "%s\n" "${exit_msg}; exiting..."
     exit $ec
 ' ERR
 
@@ -87,7 +90,7 @@ def_lognm() {
     eval lognm_home=~"$lognm"           # variable replacement, then eval tilde expansion
 
     [[ $lognm_home != "~$lognm" ]] \
-        || { err_msg -d 2 "failed to get lognm: '$lognm'"; exit; }
+        || { el_msg 2 "failed to get lognm: '$lognm'"; exit; }
 }
 
 [[ -v borg_cmd ]] \

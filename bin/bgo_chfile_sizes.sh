@@ -17,7 +17,7 @@ bgo_chfile_sizes() {
     # log_fn and logging_dir were set in _bg_pre-run
     # - log_fn is e.g. $logging_dir/borg_log or $logging_dir/borg_dryrun_log
     [[ -r $log_fn ]] \
-        || err_msg -d 3 "could not read log file: '$log_fn'"
+        || el_msg 3 "could not read log file: '$log_fn'"
 
     local chf_fn=${log_fn}_chfiles
     local errf_fn=${log_fn}_errfiles
@@ -38,7 +38,7 @@ bgo_chfile_sizes() {
         /bin/mv -f "${errf_fn}.new" "$errf_fn"
         (( running_user == 0 )) \
             && "$chown_cmd" "$lognm":"$lognm_group" "$errf_fn"
-        err_msg -d w "Error files found, see ${errf_fn}:"
+        el_msg w "Error files found, see ${errf_fn}:"
         command head "$errf_fn"
     fi
 
@@ -54,7 +54,7 @@ bgo_chfile_sizes() {
         /bin/mv -f "${chf_fn}.new" "$chf_fn"
     else
         /bin/rm -f "${chf_fn}.new"
-        err_msg -d w "no changed files found in log"
+        el_msg w "no changed files found in log"
         return
     fi
 
@@ -96,7 +96,7 @@ bgo_chfile_sizes() {
     # ensure du output was as expected
     local n_sizes
     n_sizes=$( "$grep_cmd" -c '^' "${du_out_fn}.new" ) \
-        || { err_msg -d 2 "no sizes found by du: '$PWD/${du_out_fn}.new'"; exit; }
+        || { el_msg 2 "no sizes found by du: '$PWD/${du_out_fn}.new'"; exit; }
 
     # chown and move log file
     (( running_user == 0 )) \
@@ -111,13 +111,13 @@ bgo_chfile_sizes() {
         /bin/mv -f "${du_fails_fn}.new" "$du_fails_fn"
     fi
 
-    err_msg -d i "Files and sizes output to $du_out_fn"
-    err_msg -d i "Found $n_files filenames, reported sizes on $n_sizes"
+    el_msg i "Files and sizes output to $du_out_fn"
+    el_msg i "Found $n_files filenames, reported sizes on $n_sizes"
 
     # output top 12 files sorted by size
     # -h handles human-readable chars for K, M, G, etc
     # sed prepends spaces to each line; head sends sigpipe to sort (can cause exit 141)
-    err_msg -d i "Largest 12:"
+    el_msg i "Largest 12:"
 
     # NB, GNU sort will complain when its stdin is closed, but doesn't exit with
     # code 141 (pipefail); it may exit with code 1 or 2... Using process

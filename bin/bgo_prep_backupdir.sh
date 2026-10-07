@@ -147,7 +147,7 @@ then
     # create a list of installed applications (nullglob is set)
     /bin/ls -l /Applications/ /Users/*/Applications/ > "$bakdir"/applications-list.txt
 else
-    err_msg -d 2 "Undefined mach_os: $mach_os"
+    el_msg 2 "Undefined mach_os: $mach_os"
     exit
 fi
 

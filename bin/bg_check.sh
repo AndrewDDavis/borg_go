@@ -7,7 +7,7 @@ bg_check() {
     [[ -v _chk_all ]] \
         && arch_sel=()
 
-    err_msg -d i "Calling borg check ${arch_sel[*]:0:2}..."
+    el_msg i "Calling borg check ${arch_sel[*]:0:2}..."
     [[ -s $log_fn ]] \
         && printf '\n\n' >> "$log_fn"
     chk_rc=0

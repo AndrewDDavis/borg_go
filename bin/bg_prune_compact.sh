@@ -2,7 +2,7 @@
 bg_prune() {
 
     # Remove old backups according to schedule
-    err_msg -d i "Calling borg prune${_dryrun:+ --dry-run}..."
+    el_msg i "Calling borg prune${_dryrun:+ --dry-run}..."
     [[ -s $log_fn ]] \
         && printf '\n\n' >> "$log_fn"
 
@@ -72,7 +72,7 @@ _bgp_stats() {
 
     if [[ $( "$grep_cmd" -c '^' "${bp_stats_fn}.new" ) -eq 8 ]]
     then
-        err_msg -d i "recording stats block"
+        el_msg i "recording stats block"
         /bin/mv -f "${bp_stats_fn}.new" "$bp_stats_fn"
 
         hc_msg="borg-prune stats:"$'\n'
@@ -80,7 +80,7 @@ _bgp_stats() {
     else
         hc_msg="borg-prune stats block from log not as expected:"$'\n'
         hc_msg+="$bp_stats_fn.new"$'\n'
-        err_msg -d w "$hc_msg"
+        el_msg w "$hc_msg"
     fi
 }
 
@@ -89,7 +89,7 @@ bg_compact() {
     # Compact Repo
     # actually free repo disk space by compacting segments
     # - this is most useful after delete and prune operations
-    err_msg -d i "Calling borg compact ..."
+    el_msg i "Calling borg compact ..."
     [[ -s $log_fn ]] \
         && printf '\n\n' >> "$log_fn"
 

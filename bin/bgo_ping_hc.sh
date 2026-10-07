@@ -60,30 +60,30 @@ bgo_ping_hc() {
                 stats=pstats
             ;;
             ( * )
-                err_msg -d 2 "Unrecognized option: '$1'"
+                el_msg 2 "Unrecognized option: '$1'"
             ;;
         esac
         shift
     done
 
     [[ -n ${hc_cmd:-} ]] \
-        || err_msg -d w "No actions to perform, stay frosty"
+        || el_msg w "No actions to perform, stay frosty"
 
     curl_cmd=$( builtin type -P curl ) \
-        || err_msg -d 2 "curl not found"
+        || el_msg 2 "curl not found"
 
     # Import UUID
     # - exit gracefully if UUID file doesn't exist
     uuid_file="${BORG_CONFIG_DIR}/healthchecks_UUID"
     [[ -e $uuid_file ]] \
-        || { err_msg -d w "skipping ping, uuid_file not found: '$uuid_file'"; return; }
+        || { el_msg w "skipping ping, uuid_file not found: '$uuid_file'"; return; }
 
     hc_uuid=$( < "$uuid_file" ) \
-        || err_msg -d 2 "unable to read uuid_file: '$uuid_file'"
+        || el_msg 2 "unable to read uuid_file: '$uuid_file'"
 
     # should be 36 chars
     (( ${#hc_uuid} == 36 )) \
-        || err_msg -d 2 "hc_uuid not as expected: '$hc_uuid'"
+        || el_msg 2 "hc_uuid not as expected: '$hc_uuid'"
 
     # base of healthchecks URL to ping
     hc_url='https://hc-ping.com'
@@ -107,9 +107,9 @@ bgo_ping_hc() {
     # finish up
     if [[ $hc_reponse == OK ]]
     then
-        err_msg -d i "$hc_cmd signal sent to Healthchecks"
+        el_msg i "$hc_cmd signal sent to Healthchecks"
     else
-        err_msg -d 9 "Healthchecks response: '$hc_reponse'"
+        el_msg 9 "Healthchecks response: '$hc_reponse'"
     fi
 }
 

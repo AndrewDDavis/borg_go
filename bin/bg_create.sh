@@ -6,13 +6,13 @@ bg_create() {
 
     # Create Backup Archive
     # - e.g., backup system config and user files into an archive named after this machine
-    err_msg -d i "Starting backup ..."
+    el_msg i "Starting backup ..."
 
     if [[ ! -v _dryrun ]]
     then
         bgo_ping_hc start -m "borg${_dryrun:+ --dry-run} cmds: ${cmd_array[*]}"
 
-        err_msg -d i "running pre-backup script"
+        el_msg i "running pre-backup script"
         bgo_scr_run bgo_prep_backupdir
 
         rotate_logs "$log_fn"
@@ -139,15 +139,15 @@ _bgc_rrpats() {
 
     if (( ${#pat_fn_args[*]} == 0 ))
     then
-        err_msg -d 2 "No pattern or recursion root files found in BORG_CONFIG_DIR."
+        el_msg 2 "No pattern or recursion root files found in BORG_CONFIG_DIR."
 
     elif (( ${#rr_pats[*]} == 0 ))
     then
-        err_msg -d 3 "No recursion root patterns found in pattern files."
+        el_msg 3 "No recursion root patterns found in pattern files."
     fi
 
     # report rec roots to the user
-    err_msg -d i "calling borg create${_dryrun:+ --dry-run} with recursion roots:"
+    el_msg i "calling borg create${_dryrun:+ --dry-run} with recursion roots:"
     printf >&2 '    '
     printf >&2 '%s,  ' "${rr_pats[@]:0:${#rr_pats[*]}-1}"
     printf >&2 '%s\n' "${rr_pats[@]:(-1)}"
@@ -163,7 +163,7 @@ _bgc_onlypats() {
     for fn in "${rr_paths[@]}"
     do
         [[ -r $fn ]] ||
-            err_msg -d 3 "Recursion root path not found: '$fn'"
+            el_msg 3 "Recursion root path not found: '$fn'"
     done
 
     while IFS='' read -rd '' fn <&3
@@ -180,7 +180,7 @@ _bgc_stats() {
     trap 'return' ERR
     trap 'trap - err return' RETURN
 
-    err_msg -d i "recording sizes of changed files"
+    el_msg i "recording sizes of changed files"
     bgo_chfile_sizes
 
     # set aside stats block from log to prevent overwriting
@@ -190,13 +190,13 @@ _bgc_stats() {
     # expect info block with 17 lines
     if [[ $( "$grep_cmd" -c '^' "${bc_stats_fn}.new" ) -eq 17 ]]
     then
-        err_msg -d i "recording stats block"
+        el_msg i "recording stats block"
         /bin/mv -f "${bc_stats_fn}.new" "$bc_stats_fn"
         hc_msg+="borg-create stats:"$'\n'
         hc_msg+=$( < "$bc_stats_fn" )
 
     else
         hc_msg+="borg-create stats block from log not as expected: ${bc_stats_fn}.new"
-        err_msg -d w "$hc_msg"
+        el_msg w "$hc_msg"
     fi
 }

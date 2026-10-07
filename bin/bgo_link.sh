@@ -44,14 +44,14 @@ borg_config_repo=~/Projects/Config-Sync/borg
 maybe=''
 
 [[ -n ${BORG_CONFIG_DIR:-} ]] \
-    || { err_msg -d 2 "BORG_CONFIG_DIR not set"; exit; }
+    || { el_msg 2 "BORG_CONFIG_DIR not set"; exit; }
 
 
 # Parse arguments
 function arg_reqd {
     # confirm OPTARG got a non-null value
     [[ -n ${OPTARG-} ]] \
-        || { err_msg -d 2 "Argument required for --$OPT"; exit; }
+        || { el_msg 2 "Argument required for --$OPT"; exit; }
 }
 
 while getopts 'nb:c:s:m:o:-:' OPT
@@ -84,7 +84,7 @@ do
             maybe='echo would '
         ;;
         ( ??* )
-            err_msg -d 2 "Unknown option --$OPT"
+            el_msg 2 "Unknown option --$OPT"
             exit
         ;;
         ( '?' )
@@ -107,13 +107,13 @@ ${maybe}set -vx  # verbose output of shell commands
 cd "$bin_dir"
 
 [[ -d ${borg_scripts_repo}/bin ]] \
-    || { err_msg -d 2 "borg_scripts_repo bin dir not found: '${borg_scripts_repo}/bin'"; exit; }
+    || { el_msg 2 "borg_scripts_repo bin dir not found: '${borg_scripts_repo}/bin'"; exit; }
 
 ${maybe}ln -sf "$borg_scripts_repo/bin/borg-go.sh" borg-go
 
 # check to make sure scripts are on PATH
 [[ -n $( command -v borg-go ) ]] \
-    || { [[ -n ${maybe} ]] || { err_msg -d 2 "borg-go not on path"; exit; }; }
+    || { [[ -n ${maybe} ]] || { el_msg 2 "borg-go not on path"; exit; }; }
 
 
 # Create symlinks
@@ -128,7 +128,7 @@ cd "$BORG_CONFIG_DIR"
 
 # - linking from repo dir
 [[ -d $borg_config_repo ]] \
-    || { err_msg -d 2 "borg_config_repo not found: '$borg_config_repo'"; exit; }
+    || { el_msg 2 "borg_config_repo not found: '$borg_config_repo'"; exit; }
 
 
 _chk_mk_lnk() {

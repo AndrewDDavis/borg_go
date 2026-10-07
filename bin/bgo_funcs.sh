@@ -36,7 +36,7 @@ _bg_args() {
             ( * )
                 # option(s) and args for a command
                 (( ${#cmd_array[*]} == 0 )) \
-                    && err_msg -d 3 "No command, but received argument '$1'"
+                    && el_msg 3 "No recognized command, but received argument '$1'"
 
                 case ${cmd_array[-1]} in
                     ( create )
@@ -59,7 +59,7 @@ _bg_args() {
 
     # Check for valid command(s)
     (( ${#cmd_array[*]} > 0 )) \
-        || err_msg -d 2 "No valid commands received, stay frosty."
+        || el_msg 2 "No valid commands received, stay frosty."
 }
 
 _bg_pre-run() {
@@ -87,13 +87,13 @@ _bg_pre-run() {
     then
         # running as root enforced
         # - See the ReadMe for discussion on the running user for borg
-        err_msg -d 3 "root or sudo required for remote repo commands beyond list"
+        el_msg 3 "root or sudo required for remote repo commands beyond list"
     fi
 
     # Lock file
     if [[ -e ${BORG_CONFIG_DIR}/borg-go.lock ]]
     then
-        err_msg -d 2 "lock file found: '${BORG_CONFIG_DIR}/borg-go.lock'"
+        el_msg 2 "lock file found: '${BORG_CONFIG_DIR}/borg-go.lock'"
     else
         printf '%s\n' "$$" > "${BORG_CONFIG_DIR}/borg-go.lock"
     fi
@@ -103,7 +103,7 @@ _bg_pre-run() {
     then
         unset BORG_REPO
         [[ -n ${BORG_LOCAL_REPO-} ]] \
-            || err_msg -d 6 "local repo required; set BORG_LOCAL_REPO"
+            || el_msg 6 "local repo required; set BORG_LOCAL_REPO"
 
         repo_uri=$( physpath "$BORG_LOCAL_REPO" )
 
@@ -111,7 +111,7 @@ _bg_pre-run() {
         local repo_chk
         repo_chk=$( < "$repo_uri/README" ) \
             && [[ $repo_chk == *borg* ]] \
-            || err_msg -d 7 "local repo check failed; is '$repo_uri' initialized?"
+            || el_msg 7 "local repo check failed; is '$repo_uri' initialized?"
 
         vrb_msg 2 "using local repo: '${repo_uri}'"
 
@@ -151,13 +151,13 @@ _bg_pre-run() {
     fi
 
     [[ -e $BORG_LOGGING_CONF ]] ||
-        err_msg -d 5 "BORG_LOGGING_CONF file not found: '$BORG_LOGGING_CONF'"
+        el_msg 5 "BORG_LOGGING_CONF file not found: '$BORG_LOGGING_CONF'"
 
 
     # mount repo if needed (erikson, mendeleev)
     if [[ -v BORG_MNT_REQD ]] && (( BORG_MNT_REQD ))
     then
-        err_msg -d i "Mounting backup repo"
+        el_msg i "Mounting backup repo"
         bgo_scr_run bgo_check_mount
     fi
 
@@ -189,7 +189,7 @@ _bg_post-run() {
     if [[ -v BORG_MNT_REQD ]] && (( BORG_MNT_REQD ))
     then
         # unmount
-        err_msg -d i "Unmounting backup repo"
+        el_msg i "Unmounting backup repo"
         bgo_scr_run bgo_check_mount -u
     fi
 
@@ -208,22 +208,22 @@ _bg_post-run() {
             -exec "$chown_cmd" "$lognm":"$lognm_group" '{}' \;
     fi
 
-    err_msg -d i "borg-go done"
+    el_msg i "borg-go done"
 
     if [[ -v cre_rc ]] && (( cre_rc == 0 ))
     then
-        err_msg -d i " (create status: success)"
+        el_msg i " (create status: success)"
     elif [[ -v cre_rc ]]
     then
-        err_msg -d i " (create status: $cre_rc)"
+        el_msg i " (create status: $cre_rc)"
     fi
 
     if [[ -v chk_rc ]] && (( chk_rc == 0 ))
     then
-        err_msg -d i " (check status: success)"
+        el_msg i " (check status: success)"
     elif [[ -v chk_rc ]]
     then
-        err_msg -d i " (check status: $chk_rc)"
+        el_msg i " (check status: $chk_rc)"
     fi
 }
 
@@ -244,7 +244,7 @@ bgo_scr_run() {
     shift
 
     [[ -x $scr_name ]] \
-        || { err_msg -d 9 "no executable found at ${scr_name}"; return; }
+        || { el_msg 9 "no executable found at ${scr_name}"; return; }
 
     if [[ -v _chk ]]
     then
@@ -273,7 +273,7 @@ handle_borg_ec() {
         # relay borg warning
         hc_msg="${FUNCNAME[1]}(): borg exited with code $ec; WARNINGs from ${log_fn}:"$'\n'
         hc_msg+=$( "$grep_cmd" WARNING "$log_fn" )$'\n'
-        err_msg -d w "$hc_msg"
+        el_msg w "$hc_msg"
         return 0
 
     else
@@ -282,13 +282,16 @@ handle_borg_ec() {
     fi
 }
 
-_ev_msg() {
+el_msg() {
 
-    # Call err_msg -d or vrb_msg, depending on whether the STDERR is attached
+    # Call err_msg or log_msg, depending on whether the STDERR is attached
     # to a terminal.
+    # - NB, log_msg is the same as err_msg -d
     # - NB, test -t <fd> is True if file descriptor fd is open and refers to a terminal
     if test -t 2
     then
-        true
+        err_msg "$@"
+    else
+        log_msg "$@"
     fi
 }
