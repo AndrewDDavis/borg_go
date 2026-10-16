@@ -1,6 +1,7 @@
 # shellcheck shell=bash
-bg_list_log_status() {
+bg_other_cmds() {
 
+    # Check for and run secondary commands
     if array_match cmd_array list
     then
         _ign_cmd ${#cmd_array[*]} list

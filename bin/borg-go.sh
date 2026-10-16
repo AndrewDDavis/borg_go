@@ -64,10 +64,10 @@
         --local.
 
       status
-      : Check the active and failed states of borg-go.service and its timer.
-        Typically, borg-go.service is inactive but the timer is active. Show
-        the result of 'systemctl status' on the service and timer.The \"Trigger\"
-        line of the timer output shows time until the next run of the service.
+      : Check whether the last run of the borg-go systemctl service was
+        successful. Show the start and finish times of the last run. Check whether
+        borg-go.timer exists, and is set to trigger borg-go.service. If so, show
+        the times of the last and next scheduled triggers.
 
     Options
 
@@ -116,7 +116,7 @@ borg-go() {
     _bg_pre-run
 
     # check for list or log command
-    bg_list_log_status \
+    bg_other_cmds \
         && exit
 
     # Main ops
@@ -168,7 +168,7 @@ _bg_setup() {
     import_func -l bg_create
     import_func -l bg_prune
     import_func -l bg_check
-    import_func -l bg_list_log_status
+    import_func -l bg_other_cmds
     bgo_scr_run --check bgo_prep_backupdir
 }
 
