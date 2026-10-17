@@ -1,32 +1,61 @@
 # shellcheck shell=bash
-bg_other_cmds() {
+bg_sec_cmds() {
 
-    # Check for and run secondary commands
-    if array_match cmd_array list
+    # run secondary commands
+    local sec_cmd
+    if sec_cmd=$( array_match -p cmd_array '(autorun|list|log|status)' )
     then
-        _ign_cmd ${#cmd_array[*]} list
-        _bg_list
+        if [[ ${#cmd_array[@]} -gt 1 ]]
+        then
+            el_msg w "ignoring commands other than $sec_cmd"
+        fi
 
-    elif array_match cmd_array log
-    then
-        _ign_cmd ${#cmd_array[*]} log
-        _bg_log
-
-    elif array_match cmd_array status
-    then
-        _ign_cmd ${#cmd_array[*]} status
-        _bg_status
+        case $sec_cmd in
+            ( autorun ) _bg_autorun ;;
+            ( list )    _bg_list ;;
+            ( log )     _bg_log ;;
+            ( status )  _bg_status ;;
+        esac
     else
         return 1
     fi
 }
 
-_ign_cmd() {
+_bg_autorun() {
 
-    # _ign_cmd no cmd
-    if [[ $1 -ne 1 ]]
+    [[ -n $( command -v systemctl ) ]] \
+        || { el_msg 4 "systemctl command not found"; exit; }
+
+    [[ -v 'bgl_args[*]' ]] \
+        && el_msg w "ignoring arguments: ${bgl_args[*]}"
+
+    # - NB, borg-go is usually not active, just waiting to be triggered by
+    #   the timer (i.e. it's a static unit).
+    # - can use 'is-active', then check for EC=0, 3, or 4
+    # - refer to systemctl man page under "EXIT STATUS"
+    local -i ec
+    if systemctl is-active --quiet borg-go.service
     then
-        el_msg w "ignoring commands other than $2"
+        printf >&2 '%s\n' "The borg-go service is currently active; aborting the run"
+    else
+        ec=$?
+        if (( ec == 4 ))
+        then
+            el_msg 4 "borg-go.service not found by systemctl"
+            exit
+
+        elif (( ec == 3 ))
+        then
+            # set aside the lock file so it doesn't interfere with the systemctl
+            # call of borg-go
+            bg_lockfile dodge
+            systemctl start borg-go.service
+            bg_lockfile restore
+
+        else
+            el_msg $ec "systemctl return status unexpected: $ec"
+            exit
+        fi
     fi
 }
 
@@ -51,7 +80,7 @@ _bg_log() {
 _bg_status() {
 
     [[ -n $( command -v systemctl ) ]] \
-            || { el_msg 4 "systemctl command not found"; exit; }
+        || { el_msg 4 "systemctl command not found"; exit; }
 
     # refer to systemctl man page under "EXIT STATUS"
     # - NB, borg-go is usually not active, just waiting to be triggered by

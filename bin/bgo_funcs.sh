@@ -1,6 +1,45 @@
 # shellcheck shell=bash
+bg_lockfile() {
 
-_bg_args() {
+    # # debug
+    # printf >&2 '%s\n' "bg_lockfile: called $1 for ps $$, from function ${FUNCNAME[1]}"
+
+    local lf_path
+    lf_path=${BORG_CONFIG_DIR}/borg-go.lock
+
+    case $1 in
+        ( create )
+            if [[ -e $lf_path ]]
+            then
+                el_msg 2 "lock file found: '$lf_path'"
+            else
+                printf '%s\n' "$$" > "$lf_path"
+            fi
+        ;;
+        ( remove )
+            if [[ -e "$lf_path" ]]
+            then
+                local lock_pid
+                lock_pid=$(< "$lf_path")
+
+                if [[ $lock_pid -eq $$ ]]
+                then
+                    /bin/rm -f "$lf_path"
+                else
+                    printf >&2 "%s\n" "Warning: did not remove lock file for process ${lock_pid}, as I am $$"
+                fi
+            fi
+        ;;
+        ( dodge )
+            /bin/mv "$lf_path" "${lf_path/%.lock/-$$.lock}"
+        ;;
+        ( restore )
+            /bin/mv "${lf_path/%.lock/-$$.lock}" "$lf_path"
+        ;;
+    esac
+}
+
+bg_arg_handler() {
 
     # Parse arguments to the borg-go command call
     [[ $# -eq 0  || $1 == @(-h|--help|help) ]] \
@@ -15,7 +54,7 @@ _bg_args() {
             ( create | prune | check | compact )
                 cmd_array+=( "$1" )
             ;;
-            ( list | log | status )
+            ( list | log | status | autorun )
                 cmd_array+=( "$1" )
                 bgl_args=( "${@:2}" )
                 shift $#
@@ -62,7 +101,7 @@ _bg_args() {
         || el_msg 2 "No valid commands received, stay frosty."
 }
 
-_bg_pre-run() {
+bg_pre-run() {
 
     trap 'return' ERR
     trap 'trap - return err' RETURN
@@ -82,21 +121,16 @@ _bg_pre-run() {
     export BORG_SECURITY_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/borg/security
 
     if (( running_user != 0 )) \
-        && array_match cmd_array create \
+        && ! array_match cmd_array '(list|log|status)' \
         && [[ ! -v _local ]]
     then
         # running as root enforced
         # - See the ReadMe for discussion on the running user for borg
-        el_msg 3 "root or sudo required for remote repo commands beyond list"
+        el_msg 3 "only a few commands may be run by non-root users (e.g. list, log, status)"
     fi
 
-    # Lock file
-    if [[ -e ${BORG_CONFIG_DIR}/borg-go.lock ]]
-    then
-        el_msg 2 "lock file found: '${BORG_CONFIG_DIR}/borg-go.lock'"
-    else
-        printf '%s\n' "$$" > "${BORG_CONFIG_DIR}/borg-go.lock"
-    fi
+    # lock file
+    bg_lockfile create
 
     # repo and archive defn
     if [[ -v _local ]]
@@ -184,7 +218,7 @@ _bg_pre-run() {
     fi
 }
 
-_bg_post-run() {
+bg_post-run() {
 
     if [[ -v BORG_MNT_REQD ]] && (( BORG_MNT_REQD ))
     then
@@ -210,21 +244,31 @@ _bg_post-run() {
 
     el_msg i "borg-go done"
 
-    if [[ -v cre_rc ]] && (( cre_rc == 0 ))
+    # report status of any create or check commands
+    local -i frc=0
+    if [[ -v cre_rc ]]
     then
-        el_msg i " (create status: success)"
-    elif [[ -v cre_rc ]]
-    then
-        el_msg i " (create status: $cre_rc)"
+        if (( cre_rc == 0 ))
+        then
+            el_msg i " (create status: success)"
+        else
+            el_msg i " (create status: $cre_rc)"
+            frc=$cre_rc
+        fi
     fi
 
-    if [[ -v chk_rc ]] && (( chk_rc == 0 ))
+    if [[ -v chk_rc ]]
     then
-        el_msg i " (check status: success)"
-    elif [[ -v chk_rc ]]
-    then
-        el_msg i " (check status: $chk_rc)"
+        if (( chk_rc == 0 ))
+        then
+            el_msg i " (check status: success)"
+        else
+            el_msg i " (check status: $chk_rc)"
+            (( frc == 0 )) && frc=$chk_rc
+        fi
     fi
+
+    return $frc
 }
 
 bgo_scr_run() {
@@ -240,7 +284,8 @@ bgo_scr_run() {
     [[ $1 == --check ]] \
         && { _chk=1; shift; }
 
-    local scr_name=${src_dir}/${1}.sh
+    local scr_name
+    scr_name=${src_dir}/${1}.sh
     shift
 
     [[ -x $scr_name ]] \

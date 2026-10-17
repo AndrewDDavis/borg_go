@@ -26,9 +26,10 @@ trap -- '
     exit
 ' INT TERM
 
+# Exit on non-zero return codes
 trap -- '
     ec=$?
-    exit_msg="Exception code $ec in $( basename -- ${BASH_SOURCE[0]} ) script at line $((LINENO-2))${FUNCNAME[0]:+ (function stack: ${FUNCNAME[@]})}"
+    exit_msg="Exception code $ec in file $( basename -- "${BASH_SOURCE[0]}" ) at line $((LINENO-2))${FUNCNAME[0]:+ (function stack: ${FUNCNAME[@]})}"
 
     [[ $0 == borg-go?(.sh) ]] \
         && bgo_ping_hc failure -m "$( date +"%F %T %Z" ) ${exit_msg}"
@@ -40,9 +41,21 @@ trap -- '
     exit $ec
 ' ERR
 
-# remove lock file
+# Remove lock file, if it's ours
 trap -- '
-    /bin/rm -f "${BORG_CONFIG_DIR}/borg-go.lock"
+    # # debug
+    # printf >&2 "%s\n" "exit trap: file \"$( basename -- "${BASH_SOURCE[0]}" )\" (\$0: \"$( basename -- "$0" )\"), function \"${FUNCNAME[0]-}\""
+
+    # bash manpage: "A trap on EXIT is executed before the shell terminates."
+    # - This will also run when e.g. the bgo_prep_backupdir.sh script terminates,
+    #   which is not desired. I do not know why this happens.
+    # - sometimes, ${FUNCNAME[0]} == source, e.g. when exiting from the systemctl call
+    # - NB, if the exit is triggered from inside a function, BASH_SOURCE[0] is the name
+    #   of the file that contains the function definition
+    if [[ $( basename -- "$0" ) == borg-go* ]]
+    then
+        bg_lockfile remove
+    fi
 ' EXIT
 
 # Verbosity

@@ -14,7 +14,7 @@ bgo_chfile_sizes() {
     trap 'return' ERR
     trap 'trap - err return' RETURN
 
-    # log_fn and logging_dir were set in _bg_pre-run
+    # log_fn and logging_dir were set in bg_pre-run
     # - log_fn is e.g. $logging_dir/borg_log or $logging_dir/borg_dryrun_log
     [[ -r $log_fn ]] \
         || el_msg 3 "could not read log file: '$log_fn'"
@@ -96,7 +96,7 @@ bgo_chfile_sizes() {
     # ensure du output was as expected
     local n_sizes
     n_sizes=$( "$grep_cmd" -c '^' "${du_out_fn}.new" ) \
-        || { el_msg 2 "no sizes found by du: '$PWD/${du_out_fn}.new'"; exit; }
+        || { el_msg 2 "no sizes found by du: '$PWD/${du_out_fn}.new'"; return; }
 
     # chown and move log file
     (( running_user == 0 )) \

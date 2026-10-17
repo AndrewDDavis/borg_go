@@ -7,13 +7,13 @@
 
 function print_usage { cat << EOF
 
-    $(basename $0)
+    $( basename "$0" )
     --------
     This script creates symlinks to relevant scripts and config files associated
     with the borg-go project. By default, scripts are linked in ~/.local/bin/ and config
     files are linked in BORG_CONFIG_DIR, which is usually ~/.config/borg/.
 
-    Usage: $(basename $0) [-n | --dry-run] [options]
+    Usage: $( basename "$0" ) [-n | --dry-run] [options]
 
     Options:
         -b | --bin_dir )      local bin dir (default ~/.local/bin)

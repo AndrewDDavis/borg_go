@@ -7,7 +7,8 @@
 # On macOS, need to install BorgBackup through the tap method with homebrew
 # to allow fuse mounting to work.
 
-[[ $(id -u) -eq 0 ]] || { echo "root or sudo required for $(basename -- $0)."; exit 2; }
+[[ $(id -u) -eq 0 ]] \
+    || { el_msg 2 "root or sudo required for $( basename -- "${BASH_SOURCE[0]}" )."; exit; }
 
 # Can unmount volume if run with -u
 if [[ $# -eq 1 ]] && [[ $1 == '-u' ]]; then

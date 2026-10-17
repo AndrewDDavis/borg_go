@@ -51,6 +51,9 @@
     These commands are meant to be called interactively as standalone actions.
     Only one of these may be called on a single command line.
 
+      autorun
+      : Run the borg-go service. Uses the command 'systemctl start borg-go'.
+
       list [args]
       : List recent backup archives, or contents of a specified archive. Any
         arguments are applied to the 'borg list' command. These may be options,
@@ -96,35 +99,31 @@
 
 borg-go() {
 
-    # setup the environment:
-    # - shell options, umask, variables for mach_os, lognm, etc., via the
-    #   bgo_env_setup.sh script
-    # - ERR trap would cause exit for non-zero return statuses in this function,
-    #   if errtrace was set...
-    # - also import required functions such as _bg_args, bg_create, etc.
+    # configure the environment: set variables and shell options, traps, and
+    # import required functions such as bg_arg_handler, bg_create, etc.
     _bg_setup
 
-    # handle args
-    # - keep track of create/prune/check to preserve order
+    # handle args; keep track of create/prune/check to preserve order
     local cmd_array=() bgl_args=() cre_args=() pru_args=() chk_args=() com_args=() \
         _dryrun _local _chk_all rr_paths=()
-    _bg_args "$@"
+    bg_arg_handler "$@"
     shift $#
 
     # lock file, mount repo, log file, ensure BORG_CONFIG_DIR, BORG_REPO, etc.
     local repo_uri log_fn logging_dir
-    _bg_pre-run
+    bg_pre-run
 
-    # check for list or log command
-    bg_other_cmds \
-        && exit
+    # check for secondary commands: list, log, etc.
+    bg_sec_cmds \
+        && return
 
     # Main ops
-    local cmd cre_rc chk_rc
+    local cmd
     for cmd in "${cmd_array[@]}"
     do
         case "$cmd" in
             ( create )
+                local -i cre_rc
                 bg_create
             ;;
             ( prune )
@@ -133,6 +132,7 @@ borg-go() {
                     && bg_compact
             ;;
             ( check )
+                local -i chk_rc
                 bg_check
             ;;
             ( compact )
@@ -141,7 +141,7 @@ borg-go() {
         esac
     done
 
-    _bg_post-run
+    bg_post-run
 }
 
 _bg_setup() {
@@ -162,13 +162,13 @@ _bg_setup() {
     #   setting up sudoers, or running from launchd/systemd/cron.
     # - However, we should still be able to find the supporting scripts in src_dir.
     # - Thus, borg-go should run fine as e.g. `sudo $(which borg-go)`.
-    import_func -l _bg_args  # and _bg_pre-run, _bg_post-run, bgo_scr_run, handle_borg_ec, ev_msg
+    import_func -l bg_arg_handler  # and bg_lockfile, bg_pre-run, bg_post-run, bgo_scr_run, handle_borg_ec, ev_msg
     import_func -l bgo_chfile_sizes
     import_func -l bgo_ping_hc
     import_func -l bg_create
     import_func -l bg_prune
     import_func -l bg_check
-    import_func -l bg_other_cmds
+    import_func -l bg_sec_cmds
     bgo_scr_run --check bgo_prep_backupdir
 }
 
@@ -187,7 +187,7 @@ then
     unset _deps
 
     # call main func
-    # - NB, running as a_func || exit will *disable* any ERR trap set in a_func
+    # - NB, running as 'a_func || exit' will *disable* any ERR trap set in a_func
     borg-go "$@"
 
 else
