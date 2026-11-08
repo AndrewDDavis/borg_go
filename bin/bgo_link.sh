@@ -150,10 +150,10 @@ _chk_mk_lnk() {
 _chk_mk_lnk "$borg_config_repo/healthchecks_UUID-${mach_name}"  healthchecks_UUID
 
 # The logging.conf file is a single file identified by BORG_LOGGING_CONF
-log_fn=$borg_config_repo/borg_logging-${mach_os}_${mach_name}.conf
+log_conf=$borg_config_repo/borg_logging-${mach_os}_${mach_name}.conf
 
-_chk_mk_lnk "$log_fn" logging.conf  || {
-    _chk_mk_lnk "${log_fn/_${mach_name}/}" logging.conf
+_chk_mk_lnk "$log_conf" logging.conf  || {
+    _chk_mk_lnk "${log_conf/_${mach_name}/}" logging.conf
 }
 
 # Pattern config files may follow OS only, or have additional machine-specific config

@@ -61,10 +61,11 @@
         options --consider-checkpoints and --last=10 are used, and the default
         repository is listed unless the --local option was used.
 
-      log [args]
+      log [args], sdlog [args]
       : Show the most recent log file using the 'less' command. Any options are
         applied to the less command line. This action respects --dry-run and
-        --local.
+        --local. If sdlog is used, the SystemD log file is shown, rather than
+        the borg log.
 
       status
       : Check whether the last run of the borg-go systemctl service was

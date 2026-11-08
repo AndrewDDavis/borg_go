@@ -54,7 +54,7 @@ bg_arg_handler() {
             ( create | prune | check | compact )
                 cmd_array+=( "$1" )
             ;;
-            ( list | log | status | autorun )
+            ( list | log | sdlog | status | autorun )
                 cmd_array+=( "$1" )
                 bgl_args=( "${@:2}" )
                 shift $#
@@ -121,7 +121,7 @@ bg_pre-run() {
     export BORG_SECURITY_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/borg/security
 
     if (( running_user != 0 )) \
-        && ! array_match cmd_array '(list|log|status)' \
+        && ! array_match cmd_array '(list|log|sdlog|status)' \
         && [[ ! -v _local ]]
     then
         # running as root enforced

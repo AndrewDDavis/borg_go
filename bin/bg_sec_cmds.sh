@@ -3,7 +3,7 @@ bg_sec_cmds() {
 
     # run secondary commands
     local sec_cmd
-    if sec_cmd=$( array_match -p cmd_array '(autorun|list|log|status)' )
+    if sec_cmd=$( array_match -p cmd_array '(autorun|list|log|sdlog|status)' )
     then
         if [[ ${#cmd_array[@]} -gt 1 ]]
         then
@@ -11,10 +11,14 @@ bg_sec_cmds() {
         fi
 
         case $sec_cmd in
-            ( autorun ) _bg_autorun ;;
-            ( list )    _bg_list ;;
-            ( log )     _bg_log ;;
-            ( status )  _bg_status ;;
+            ( autorun )
+                _bg_autorun ;;
+            ( list )
+                _bg_list ;;
+            ( log | sdlog )
+                _bg_log ;;
+            ( status )
+                _bg_status ;;
         esac
     else
         return 1
@@ -71,10 +75,16 @@ _bg_list() {
 
 _bg_log() {
 
+    local lfn
+    case $sec_cmd in
+        ( log )   lfn=$log_fn ;;
+        ( sdlog ) lfn=$( dirname "$log_fn" )/borg-go_systemd_out ;;
+    esac
+
     command less -iJMR \
         --buffers=1024 --jump-target=.2 --tabs=4 --shift=4 --use-color \
         "${bgl_args[@]}" \
-        "$log_fn"
+        "$lfn"
 }
 
 _bg_status() {
