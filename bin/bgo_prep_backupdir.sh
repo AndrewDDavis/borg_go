@@ -98,6 +98,19 @@ then
     unset fn vsc_bakdir
 fi
 
+# Backup Obsidian settings and workspace
+if [[ -d "$lognm_home"/Documents/.obsidian && -d "$lognm_home"/Projects/Config-Sync/obsidian ]]
+then
+    /usr/bin/tar -czf "$bakdir"/obsidian-documents-config-new.tgz \
+        "$lognm_home"/Documents/.obsidian \
+        "$lognm_home"/Projects/Config-Sync/obsidian
+    if [[ -e "$bakdir"/obsidian-documents-config.tgz ]] && command cmp -s "$bakdir"/obsidian-documents-config{,-new}.tgz
+    then
+        /bin/rm "$bakdir"/obsidian-documents-config-new.tgz
+    else
+        /bin/mv -f "$bakdir"/obsidian-documents-config{-new,}.tgz
+    fi
+fi
 
 # OS dependent files
 # - mach_name and mach_os defined in bgo_env_setup
